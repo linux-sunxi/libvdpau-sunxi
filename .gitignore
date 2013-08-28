@@ -1,0 +1,3 @@
+*.d
+*.o
+libvdpau_sunxi.so.1
