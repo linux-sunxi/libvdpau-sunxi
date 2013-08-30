@@ -566,7 +566,10 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 		h->nal_unit_type = ((uint8_t *)(decoder->data))[pos++] & 0x1f;
 
 		if (h->nal_unit_type != 5 && h->nal_unit_type != 1)
+		{
+			free(c);
 			return 0;
+		}
 
 		// ??
 		writel((0x1 << 25) | (0x1 << 10), c->regs + VE_H264_CTRL);
@@ -700,5 +703,6 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 	// stop H264 engine
 	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x7, c->regs + VE_CTRL);
 
+	free(c);
 	return 1;
 }
