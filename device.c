@@ -29,7 +29,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *dev
 	if (!dev)
 		return VDP_STATUS_RESOURCES;
 
-	dev->display = display;
+	dev->display = XOpenDisplay(XDisplayString(display));
 	dev->screen = screen;
 
 	if (!ve_open())
@@ -58,6 +58,7 @@ VdpStatus vdp_device_destroy(VdpDevice device)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	ve_close();
+	XCloseDisplay(dev->display);
 
 	handle_destroy(device);
 	free(dev);

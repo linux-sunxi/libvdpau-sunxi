@@ -1,9 +1,10 @@
 This is an experimental VDPAU implementation for sunxi SoCs.
 
-Most features of full VDPAU are missing, only decoding of h264, mpeg1 and mpeg2
-will work. Output is not integrated into window system but rather overlays it.
-Only tested with mplayer, if other players need unimplemented functions something
-will fail.
+Most features of full VDPAU are missing, only decoding of h264, mpeg1 and
+mpeg2 will work. Output bypasses X video driver, hence don't try to use Xv
+at the same time.
+Only tested with mplayer, if other players need unimplemented functions
+something will fail.
 
    $ make
    $ make install

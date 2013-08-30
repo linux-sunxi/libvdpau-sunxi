@@ -80,7 +80,13 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 	if (!(os->vs))
 		return VDP_STATUS_INVALID_HANDLE;
 
-
+	if (destination_video_rect)
+	{
+		os->video_x = destination_video_rect->x0;
+		os->video_y = destination_video_rect->y0;
+		os->video_width = destination_video_rect->x1 - destination_video_rect->x0;
+		os->video_height = destination_video_rect->y1 - destination_video_rect->y0;
+	}
 
 	if (layer_count != 0)
 		VDPAU_DBG("Requested unimplemented additional layers");

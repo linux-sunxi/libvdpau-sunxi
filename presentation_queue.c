@@ -74,6 +74,19 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device, Drawable dr
 		return VDP_STATUS_RESOURCES;
 	}
 
+	XSetWindowBackground(dev->display, drawable, 0x000102);
+
+	__disp_colorkey_t ck;
+	ck.ck_max.red = ck.ck_min.red = 0;
+	ck.ck_max.green = ck.ck_min.green = 1;
+	ck.ck_max.blue = ck.ck_min.blue = 2;
+	ck.red_match_rule = 2;
+	ck.green_match_rule = 2;
+	ck.blue_match_rule = 2;
+
+	args[1] = (unsigned long)(&ck);
+	ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
+
 	int handle = handle_create(qt);
 	if (handle == -1)
 	{
@@ -209,6 +222,11 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	if (earliest_presentation_time != 0)
 		VDPAU_DBG("Presentation time not supported");
 
+	Window c;
+	int x,y;
+	XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen), 0, 0, &x, &y, &c);
+	XClearWindow(q->device->display, q->target->drawable);
+
 	__disp_layer_info_t layer_info;
 	memset(&layer_info, 0, sizeof(layer_info));
 	layer_info.pipe = 1;
@@ -227,15 +245,16 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	layer_info.src_win.y = 0;
 	layer_info.src_win.width = os->vs->width;
 	layer_info.src_win.height = os->vs->height;
-	layer_info.scn_win.x = 0;
-	layer_info.scn_win.y = 0;
-	layer_info.scn_win.width = clip_width;
-	layer_info.scn_win.height = clip_height;
+	layer_info.scn_win.x = x + os->video_x;
+	layer_info.scn_win.y = y + os->video_y;
+	layer_info.scn_win.width = os->video_width;
+	layer_info.scn_win.height = os->video_height;
+	layer_info.ck_enable = 1;
 
 	uint32_t args[4] = { 0, q->target->layer, (unsigned long)(&layer_info), 0 };
 	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
-	ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
+	ioctl(q->target->fd, DISP_CMD_LAYER_BOTTOM, args);
 	ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 
 	return VDP_STATUS_OK;
