@@ -160,9 +160,12 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device, VdpDecoderProfile pro
 	case VDP_DECODER_PROFILE_H264_BASELINE:
 	case VDP_DECODER_PROFILE_H264_MAIN:
 	case VDP_DECODER_PROFILE_H264_HIGH:
+		*is_supported = VDP_TRUE;
+		return VDP_STATUS_OK;
 	default:
 		break;
 	}
 
-	return VDP_STATUS_ERROR;
+	*is_supported = VDP_FALSE;
+	return VDP_STATUS_OK;
 }

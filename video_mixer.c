@@ -97,6 +97,9 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 
 VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer, uint32_t feature_count, VdpVideoMixerFeature const *features, VdpBool *feature_supports)
 {
+	if (feature_count == 0)
+		return VDP_STATUS_OK;
+
 	if (!features || !feature_supports)
 		return VDP_STATUS_INVALID_POINTER;
 
@@ -110,6 +113,9 @@ VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer, uint32_t feat
 
 VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer, uint32_t feature_count, VdpVideoMixerFeature const *features, VdpBool const *feature_enables)
 {
+	if (feature_count == 0)
+		return VDP_STATUS_OK;
+
 	if (!features || !feature_enables)
 		return VDP_STATUS_INVALID_POINTER;
 
@@ -182,8 +188,8 @@ VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device, VdpVideoMixerF
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-
-	return VDP_STATUS_ERROR;
+	*is_supported = VDP_FALSE;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device, VdpVideoMixerParameter parameter, VdpBool *is_supported)
