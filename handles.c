@@ -17,39 +17,57 @@
  *
  */
 
+#include <string.h>
 #include "vdpau_private.h"
 
-static void *handle_data[MAX_HANDLES];
+#define INITIAL_SIZE 16
+
+static struct
+{
+	void **data;
+	int size;
+} ht;
 
 int handle_create(void *data)
 {
+	int index;
+
 	if (!data)
 		return -1;
 
-	int i, handle = -1;
-
-	for (i = 0; i < MAX_HANDLES; i++)
-		if (handle_data[i] == NULL)
-		{
-			handle_data[i] = data;
-			handle = i;
+	for (index = 0; index < ht.size; index++)
+		if (ht.data[index] == NULL)
 			break;
-		}
 
-	return handle;
+	if (index >= ht.size)
+	{
+		int new_size = ht.size ? ht.size * 2 : INITIAL_SIZE;
+		void **new_data = realloc(ht.data, new_size * sizeof(void *));
+		if (!new_data)
+			return -1;
+
+		memset(new_data + ht.size, 0, (new_size - ht.size) * sizeof(void *));
+		ht.data = new_data;
+		ht.size = new_size;
+	}
+
+	ht.data[index] = data;
+	return index + 1;
 }
 
 void *handle_get(int handle)
 {
-	void *data = NULL;
-	if (handle < MAX_HANDLES)
-		data = handle_data[handle];
+	int index = handle - 1;
+	if (index < ht.size)
+		return ht.data[index];
 
-	return data;
+	return NULL;
 }
 
 void handle_destroy(int handle)
 {
-	if (handle < MAX_HANDLES)
-		handle_data[handle] = NULL;
+	int index = handle - 1;
+
+	if (index < ht.size)
+		ht.data[index] = NULL;
 }
