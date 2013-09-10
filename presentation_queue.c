@@ -251,6 +251,15 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	layer_info.scn_win.height = os->video_height;
 	layer_info.ck_enable = 1;
 
+	if (layer_info.scn_win.y < 0)
+	{
+		int cutoff = -(layer_info.scn_win.y);
+		layer_info.src_win.y += cutoff;
+		layer_info.src_win.height -= cutoff;
+		layer_info.scn_win.y = 0;
+		layer_info.scn_win.height -= cutoff;
+	}
+
 	uint32_t args[4] = { 0, q->target->layer, (unsigned long)(&layer_info), 0 };
 	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
