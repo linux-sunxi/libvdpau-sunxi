@@ -55,9 +55,7 @@ static uint32_t get_u(void *regs, int num)
 {
 	writel(0x00000002 | (num << 8), regs + VE_H264_TRIGGER);
 
-	// how to check for finish?
-	//fprintf(stderr, "Status: 0x%08x\n", readl(regs + VE_H264_STATUS));
-	usleep(10);
+	while (readl(regs + VE_H264_STATUS) & (1 << 8));
 
 	return readl(regs + VE_H264_BASIC_BITS);
 }
@@ -66,9 +64,7 @@ static uint32_t get_ue(void *regs)
 {
 	writel(0x00000005, regs + VE_H264_TRIGGER);
 
-	// how to check for finish?
-	//fprintf(stderr, "Status: 0x%08x\n", readl(regs + VE_H264_STATUS));
-	usleep(10);
+	while (readl(regs + VE_H264_STATUS) & (1 << 8));
 
 	return readl(regs + VE_H264_BASIC_BITS);
 }
@@ -77,9 +73,7 @@ static int32_t get_se(void *regs)
 {
 	writel(0x00000004, regs + VE_H264_TRIGGER);
 
-	// how to check for finish?
-	//fprintf(stderr, "Status: 0x%08x\n", readl(regs + VE_H264_STATUS));
-	usleep(10);
+	while (readl(regs + VE_H264_STATUS) & (1 << 8));
 
 	return readl(regs + VE_H264_BASIC_BITS);
 }
