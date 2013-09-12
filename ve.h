@@ -26,6 +26,7 @@ int ve_open(void);
 void ve_close(void);
 void ve_flush_cache(void *start, int len);
 void *ve_get_regs(void);
+int ve_get_version(void);
 int ve_wait(int timeout);
 
 void *ve_malloc(int size);
@@ -43,6 +44,7 @@ static inline uint32_t readl(void *addr)
 }
 
 #define VE_CTRL				0x000
+#define VE_VERSION			0x0f0
 
 #define VE_MPEG_PIC_HDR			0x100
 #define VE_MPEG_SIZE			0x108

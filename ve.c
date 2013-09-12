@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <stropts.h>
 #include <sys/mman.h>
+#include "vdpau_private.h"
 #include "ve.h"
 
 #define DEVICE "/dev/cedar_dev"
@@ -68,6 +69,7 @@ struct cedarv_cache_range
 
 static int fd = -1;
 static void *regs = NULL;
+static int version = 0;
 
 struct memchunk_t
 {
@@ -106,7 +108,10 @@ int ve_open(void)
 	ioctl(fd, IOCTL_SET_VE_FREQ, 240);
 	ioctl(fd, IOCTL_RESET_VE, 0);
 
-	writel(0x00130000, regs + VE_CTRL);
+	writel(0x00130007, regs + VE_CTRL);
+
+	version = readl(regs + VE_VERSION) >> 16;
+	VDPAU_DBG("VE version 0x%04x opened", version);
 
 	return 1;
 }
@@ -145,6 +150,11 @@ void *ve_get_regs(void)
 		return NULL;
 
 	return regs;
+}
+
+int ve_get_version(void)
+{
+	return version;
 }
 
 int ve_wait(int timeout)
