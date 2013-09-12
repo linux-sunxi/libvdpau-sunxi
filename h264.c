@@ -25,12 +25,21 @@
 
 int h264_init(decoder_ctx_t *decoder)
 {
-	decoder->extra_data = ve_malloc(320 * 1024);
+	int extra_data_size = 320 * 1024;
+	if (ve_get_version() == 0x1625)
+	{
+		// Engine version 0x1625 needs two extra buffers
+		extra_data_size += ((decoder->width - 1) / 16 + 32) * 192;
+		extra_data_size = (extra_data_size + 4095) & ~4095;
+		extra_data_size += ((decoder->width - 1) / 16 + 64) * 80;
+	}
+
+	decoder->extra_data = ve_malloc(extra_data_size);
 	if (!decoder->extra_data)
 		return 0;
 
-	memset(decoder->extra_data, 0, 320 * 1024);
-	ve_flush_cache(decoder->extra_data, 320 * 1024);
+	memset(decoder->extra_data, 0, extra_data_size);
+	ve_flush_cache(decoder->extra_data, extra_data_size);
 
 	return 1;
 }
@@ -549,6 +558,19 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 	// activate H264 engine
 	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1, c->regs + VE_CTRL);
 
+	// some buffers
+	uint32_t extra_buffers = ve_virt2phys(decoder->extra_data);
+	writel(extra_buffers, c->regs + VE_H264_EXTRA_BUFFER1);
+	writel(extra_buffers + 0x48000, c->regs + VE_H264_EXTRA_BUFFER2);
+	if (ve_get_version() == 0x1625)
+	{
+		int size = (c->picture_width_in_mbs_minus1 + 32) * 192;
+		size = (size + 4095) & ~4095;
+		writel(0xa, c->regs + 0x50);
+		writel(extra_buffers + 0x50000, c->regs + 0x54);
+		writel(extra_buffers + 0x50000 + size, c->regs + 0x58);
+	}
+
 	unsigned int slice, pos = 0;
 	for (slice = 0; slice < info->slice_count; slice++)
 	{
@@ -590,11 +612,6 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 
 			// output index
 			writel(output->pos, c->regs + VE_H264_OUTPUT_FRAME_IDX);
-
-			// some buffers
-			uint32_t extra_buffers = ve_virt2phys(decoder->extra_data);
-			writel(extra_buffers, c->regs + VE_H264_EXTRA_BUFFER1);
-			writel(extra_buffers + 0x48000, c->regs + VE_H264_EXTRA_BUFFER2);
 		}
 
 		// fill RefPicLists
