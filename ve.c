@@ -18,12 +18,12 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stropts.h>
 #include <sys/mman.h>
-#include "vdpau_private.h"
 #include "ve.h"
 
 #define DEVICE "/dev/cedar_dev"
@@ -111,7 +111,7 @@ int ve_open(void)
 	writel(0x00130007, regs + VE_CTRL);
 
 	version = readl(regs + VE_VERSION) >> 16;
-	VDPAU_DBG("VE version 0x%04x opened", version);
+	printf("[VDPAU SUNXI] VE version 0x%04x opened.\n", version);
 
 	return 1;
 }

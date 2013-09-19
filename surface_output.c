@@ -99,7 +99,7 @@ VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface, void cons
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG("%s called but unimplemented!", __func__);
+	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
 
 
 
@@ -112,7 +112,7 @@ VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface, VdpIndex
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG("%s called but unimplemented!", __func__);
+	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
 
 
 
@@ -125,7 +125,7 @@ VdpStatus vdp_output_surface_put_bits_y_cb_cr(VdpOutputSurface surface, VdpYCbCr
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG("%s called but unimplemented!", __func__);
+	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
 
 
 
@@ -142,7 +142,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	if (!in)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG("%s called but unimplemented!", __func__);
+	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
 
 
 
@@ -155,7 +155,7 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG("%s called but unimplemented!", __func__);
+	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
 
 
 

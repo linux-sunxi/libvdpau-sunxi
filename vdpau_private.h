@@ -94,8 +94,10 @@ typedef struct
 #ifdef DEBUG
 #include <stdio.h>
 #define VDPAU_DBG(format, ...) fprintf(stderr, "[VDPAU SUNXI] " format "\n", ##__VA_ARGS__)
+#define VDPAU_DBG_ONCE(format, ...) do { static uint8_t __once; if (!__once) { fprintf(stderr, "[VDPAU SUNXI] " format "\n", ##__VA_ARGS__); __once = 1; } } while(0)
 #else
 #define VDPAU_DBG(format, ...)
+#define VDPAU_DBG_ONCE(format, ...)
 #endif
 
 int handle_create(void *data);

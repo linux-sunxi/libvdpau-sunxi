@@ -220,7 +220,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	}
 
 	if (earliest_presentation_time != 0)
-		VDPAU_DBG("Presentation time not supported");
+		VDPAU_DBG_ONCE("Presentation time not supported");
 
 	Window c;
 	int x,y;

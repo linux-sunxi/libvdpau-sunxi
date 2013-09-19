@@ -64,11 +64,11 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 		return VDP_STATUS_INVALID_HANDLE;
 
 	if (background_surface != VDP_INVALID_HANDLE)
-		VDPAU_DBG("Requested unimplemented background_surface");
+		VDPAU_DBG_ONCE("Requested unimplemented background_surface");
 
 
 	if (current_picture_structure != VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME)
-		VDPAU_DBG("Requested unimplemented picture_structure");
+		VDPAU_DBG_ONCE("Requested unimplemented picture_structure");
 
 
 
@@ -89,7 +89,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 	}
 
 	if (layer_count != 0)
-		VDPAU_DBG("Requested unimplemented additional layers");
+		VDPAU_DBG_ONCE("Requested unimplemented additional layers");
 
 
 	return VDP_STATUS_OK;
