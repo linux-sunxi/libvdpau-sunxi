@@ -201,8 +201,20 @@ VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device, VdpVideoMixe
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	switch (parameter)
+	{
+	case VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE:
+	case VDP_VIDEO_MIXER_PARAMETER_LAYERS:
+	case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT:
+	case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH:
+		*is_supported = VDP_TRUE;
+		break;
+	default:
+		*is_supported = VDP_FALSE;
+		break;
+	}
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device, VdpVideoMixerParameter parameter, void *min_value, void *max_value)
@@ -214,6 +226,18 @@ VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device, VdpVideo
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	switch (parameter)
+	{
+	case VDP_VIDEO_MIXER_PARAMETER_LAYERS:
+		*(uint32_t *)min_value = 0;
+		*(uint32_t *)max_value = 0;
+		return VDP_STATUS_OK;
+	case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT:
+	case VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH:
+		*(uint32_t *)min_value = 0;
+		*(uint32_t *)max_value = 8192;
+		return VDP_STATUS_OK;
+	}
 
 	return VDP_STATUS_ERROR;
 }
@@ -227,8 +251,9 @@ VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device, VdpVideoMixe
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device, VdpVideoMixerAttribute attribute, void *min_value, void *max_value)
@@ -240,6 +265,29 @@ VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device, VdpVideo
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	switch (attribute)
+	{
+	case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
+	case VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX:
+		return VDP_STATUS_ERROR;
+
+	case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
+	case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
+	case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
+		*(float *)min_value = 0.0;
+		*(float *)max_value = 1.0;
+		return VDP_STATUS_OK;
+
+	case VDP_VIDEO_MIXER_ATTRIBUTE_SHARPNESS_LEVEL:
+		*(float *)min_value = -1.0;
+		*(float *)max_value = 1.0;
+		return VDP_STATUS_OK;
+
+	case VDP_VIDEO_MIXER_ATTRIBUTE_SKIP_CHROMA_DEINTERLACE:
+		*(uint8_t *)min_value = 0;
+		*(uint8_t *)max_value = 1;
+		return VDP_STATUS_OK;
+	}
 
 	return VDP_STATUS_ERROR;
 }

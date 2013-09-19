@@ -155,20 +155,30 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFo
 
 VdpStatus vdp_video_surface_query_capabilities(VdpDevice device, VdpChromaType surface_chroma_type, VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
 {
+	if (!is_supported || !max_width || !max_height)
+		return VDP_STATUS_INVALID_POINTER;
+
 	device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = surface_chroma_type == VDP_CHROMA_TYPE_420;
+	*max_width = 8192;
+	*max_height = 8192;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_video_surface_query_get_put_bits_y_cb_cr_capabilities(VdpDevice device, VdpChromaType surface_chroma_type, VdpYCbCrFormat bits_ycbcr_format, VdpBool *is_supported)
 {
+	if (!is_supported)
+		return VDP_STATUS_INVALID_POINTER;
+
 	device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }

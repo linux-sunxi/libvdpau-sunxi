@@ -60,6 +60,9 @@ VdpStatus vdp_bitmap_surface_query_capabilities(VdpDevice device, VdpRGBAFormat 
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
+	*max_width = 8192;
+	*max_height = 8192;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }

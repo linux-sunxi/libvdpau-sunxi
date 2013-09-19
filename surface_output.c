@@ -171,8 +171,11 @@ VdpStatus vdp_output_surface_query_capabilities(VdpDevice device, VdpRGBAFormat 
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 || surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8);
+	*max_width = 8192;
+	*max_height = 8192;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpBool *is_supported)
@@ -184,8 +187,9 @@ VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice de
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpIndexedFormat bits_indexed_format, VdpColorTableFormat color_table_format, VdpBool *is_supported)
@@ -197,9 +201,9 @@ VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice devic
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
 
-
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_output_surface_query_put_bits_y_cb_cr_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpYCbCrFormat bits_ycbcr_format, VdpBool *is_supported)
@@ -211,7 +215,7 @@ VdpStatus vdp_output_surface_query_put_bits_y_cb_cr_capabilities(VdpDevice devic
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	*is_supported = VDP_FALSE;
 
-
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
