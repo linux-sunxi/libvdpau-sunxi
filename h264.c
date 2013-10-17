@@ -555,6 +555,12 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 	c->info = info;
 	c->output = output;
 
+	if (!c->info->frame_mbs_only_flag)
+	{
+		VDPAU_DBG("We can't decode interlaced Frames yet! Sorry");
+		return 0;
+	}
+
 	// activate H264 engine
 	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1, c->regs + VE_CTRL);
 
@@ -587,7 +593,7 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 			return 0;
 		}
 
-		// ??
+		// Enable startcode detect and ??
 		writel((0x1 << 25) | (0x1 << 10), c->regs + VE_H264_CTRL);
 
 		// input buffer
@@ -656,42 +662,49 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 			}
 		}
 
-		// picture flags
-		writel((info->entropy_coding_mode_flag << 15)
-			| (info->num_ref_idx_l0_active_minus1 << 10) // very unsure
-			| (info->weighted_pred_flag << 4)
-			| (info->weighted_bipred_idc << 2)
-			| (info->transform_8x8_mode_flag << 0)
+		// picture parameters
+		writel(((info->entropy_coding_mode_flag & 0x1) << 15)
+			| ((info->num_ref_idx_l0_active_minus1 & 0x1f) << 10)
+			| ((info->num_ref_idx_l1_active_minus1 & 0x1f) << 5)
+			| ((info->weighted_pred_flag & 0x1) << 4)
+			| ((info->weighted_bipred_idc & 0x3) << 2)
+			| ((info->constrained_intra_pred_flag & 0x1) << 1)
+			| ((info->transform_8x8_mode_flag & 0x1) << 0)
 			, c->regs + VE_H264_PIC_HDR);
 
-		// frame size
-		writel((0xd << 16) // unsure where this comes from
-			| (c->picture_width_in_mbs_minus1 << 8)
-			| (c->picture_height_in_mbs_minus1)
+		// sequence parameters
+		writel((0x1 << 19)
+			| ((c->info->frame_mbs_only_flag & 0x1) << 18)
+			| ((c->info->mb_adaptive_frame_field_flag & 0x1) << 17)
+			| ((c->info->direct_8x8_inference_flag & 0x1) << 16)
+			| ((c->picture_width_in_mbs_minus1 & 0xff) << 8)
+			| ((c->picture_height_in_mbs_minus1 & 0xff) << 0)
 			, c->regs + VE_H264_FRAME_SIZE);
 
-		// slice flags
-		writel((h->first_mb_in_slice % (c->picture_width_in_mbs_minus1 + 1) << 24)
-			| (h->first_mb_in_slice / (c->picture_width_in_mbs_minus1 + 1) << 16)
-			| (info->is_reference << 12)
-			| ((h->slice_type) << 8)
+		// slice parameters
+		writel((((h->first_mb_in_slice % (c->picture_width_in_mbs_minus1 + 1)) & 0xff) << 24)
+			| (((h->first_mb_in_slice / (c->picture_width_in_mbs_minus1 + 1)) & 0xff) << 16)
+			| ((info->is_reference & 0x1) << 12)
+			| ((h->slice_type & 0xf) << 8)
 			| ((slice == 0 ? 0x1 : 0x0) << 5)
-			| (h->direct_spatial_mv_pred_flag << 2) // unsure
+			| ((info->field_pic_flag & 0x1) << 4)
+			| ((info->bottom_field_flag & 0x1) << 3)
+			| ((h->direct_spatial_mv_pred_flag & 0x1) << 2)
+			| ((h->cabac_init_idc & 0x3) << 0)
 			, c->regs + VE_H264_SLICE_HDR);
 
-		writel((h->num_ref_idx_l0_active_minus1 << 24)
-			| (h->num_ref_idx_l1_active_minus1 << 16)
-			| (h->num_ref_idx_active_override_flag << 12)
-			| (h->disable_deblocking_filter_idc << 8)
+		writel(((h->num_ref_idx_l0_active_minus1 & 0x1f) << 24)
+			| ((h->num_ref_idx_l1_active_minus1 & 0x1f) << 16)
+			| ((h->num_ref_idx_active_override_flag & 0x1) << 12)
+			| ((h->disable_deblocking_filter_idc & 0x3) << 8)
 			| ((h->slice_alpha_c0_offset_div2 & 0xf) << 4)
 			| ((h->slice_beta_offset_div2 & 0xf) << 0)
 			, c->regs + VE_H264_SLICE_HDR2);
 
-		// qp offsets
 		writel((0x1 << 24)
 			| ((info->second_chroma_qp_index_offset & 0x3f) << 16)
 			| ((info->chroma_qp_index_offset & 0x3f) << 8)
-			| (info->pic_init_qp_minus26 + 26 + h->slice_qp_delta)
+			| (((info->pic_init_qp_minus26 + 26 + h->slice_qp_delta) & 0x3f) << 0)
 			, c->regs + VE_H264_QP_PARAM);
 
 		// clear status flags
