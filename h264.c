@@ -156,6 +156,7 @@ typedef struct
 	video_surface_ctx_t *output;
 	uint8_t picture_width_in_mbs_minus1;
 	uint8_t picture_height_in_mbs_minus1;
+	uint8_t default_scaling_lists;
 
 	int ref_count;
 	h264_reference_frame_t ref_frames[16];
@@ -546,6 +547,24 @@ static void fill_frame_lists(h264_context_t *c)
 	qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames);
 }
 
+// VDPAU does not tell us if the scaling lists are default or custom
+static int check_scaling_lists(h264_context_t *c)
+{
+	const uint32_t *sl4 = (uint32_t *)&c->info->scaling_lists_4x4[0][0];
+	const uint32_t *sl8 = (uint32_t *)&c->info->scaling_lists_8x8[0][0];
+
+	int i;
+	for (i = 0; i < 6 * 16 / 4; i++)
+		if (sl4[i] != 0x10101010)
+			return 0;
+
+	for (i = 0; i < 2 * 64 / 4; i++)
+		if (sl8[i] != 0x10101010)
+			return 0;
+
+	return 1;
+}
+
 int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const int len, video_surface_ctx_t *output)
 {
 	h264_context_t *c = calloc(1, sizeof(h264_context_t));
@@ -575,6 +594,22 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 		writel(0xa, c->regs + 0x50);
 		writel(extra_buffers + 0x50000, c->regs + 0x54);
 		writel(extra_buffers + 0x50000 + size, c->regs + 0x58);
+	}
+
+	// write custom scaling lists
+	if (!(c->default_scaling_lists = check_scaling_lists(c)))
+	{
+		const uint32_t *sl4 = (uint32_t *)&c->info->scaling_lists_4x4[0][0];
+		const uint32_t *sl8 = (uint32_t *)&c->info->scaling_lists_8x8[0][0];
+
+		writel(VE_SRAM_H264_SCALING_LISTS, c->regs + VE_H264_RAM_WRITE_PTR);
+
+		int i;
+		for (i = 0; i < 2 * 64 / 4; i++)
+			writel(sl8[i], c->regs + VE_H264_RAM_WRITE_DATA);
+
+		for (i = 0; i < 6 * 16 / 4; i++)
+			writel(sl4[i], c->regs + VE_H264_RAM_WRITE_DATA);
 	}
 
 	unsigned int slice, pos = 0;
@@ -701,7 +736,7 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 			| ((h->slice_beta_offset_div2 & 0xf) << 0)
 			, c->regs + VE_H264_SLICE_HDR2);
 
-		writel((0x1 << 24)
+		writel(((c->default_scaling_lists & 0x1) << 24)
 			| ((info->second_chroma_qp_index_offset & 0x3f) << 16)
 			| ((info->chroma_qp_index_offset & 0x3f) << 8)
 			| (((info->pic_init_qp_minus26 + 26 + h->slice_qp_delta) & 0x3f) << 0)

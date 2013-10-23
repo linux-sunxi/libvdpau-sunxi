@@ -93,5 +93,6 @@ static inline uint32_t readl(void *addr)
 #define VE_SRAM_H264_FRAMEBUFFER_LIST	0x400
 #define VE_SRAM_H264_REF_LIST0		0x640
 #define VE_SRAM_H264_REF_LIST1		0x664
+#define VE_SRAM_H264_SCALING_LISTS	0x800
 
 #endif
