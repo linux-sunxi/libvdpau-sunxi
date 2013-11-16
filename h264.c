@@ -573,6 +573,7 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 	c->picture_height_in_mbs_minus1 = (decoder->height - 1) / 16;
 	c->info = info;
 	c->output = output;
+	output->source_format = INTERNAL_YCBCR_FORMAT;
 
 	if (!c->info->frame_mbs_only_flag)
 	{

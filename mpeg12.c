@@ -54,6 +54,7 @@ int mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfoMPEG1Or2 const *info, co
 
 	int i;
 	void *ve_regs = ve_get_regs();
+	output->source_format = INTERNAL_YCBCR_FORMAT;
 
 	// activate MPEG engine
 	writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x0, ve_regs + VE_CTRL);

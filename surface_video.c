@@ -124,6 +124,9 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFo
 
 VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFormat source_ycbcr_format, void const *const *source_data, uint32_t const *source_pitches)
 {
+	int i;
+	const uint8_t *src;
+	uint8_t *dst;
 	video_surface_ctx_t *vs = handle_get(surface);
 	if (!vs)
 		return VDP_STATUS_INVALID_HANDLE;
@@ -134,19 +137,64 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFo
 	{
 	case VDP_YCBCR_FORMAT_YUYV:
 	case VDP_YCBCR_FORMAT_UYVY:
+		if (vs->chroma_type != VDP_CHROMA_TYPE_422)
+			return VDP_STATUS_INVALID_CHROMA_TYPE;
+		src = source_data[0];
+		dst = vs->data;
+		for (i = 0; i < vs->height; i++) {
+			memcpy(dst, src, 2*vs->width);
+			src += source_pitches[0];
+			dst += 2*vs->width;
+		}
+		break;
 	case VDP_YCBCR_FORMAT_Y8U8V8A8:
 	case VDP_YCBCR_FORMAT_V8U8Y8A8:
 
 		break;
 
 	case VDP_YCBCR_FORMAT_NV12:
-
+		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
+			return VDP_STATUS_INVALID_CHROMA_TYPE;
+		src = source_data[0];
+		dst = vs->data;
+		for (i = 0; i < vs->height; i++) {
+			memcpy(dst, src, vs->width);
+			src += source_pitches[0];
+			dst += vs->width;
+		}
+		src = source_data[1];
+		dst = vs->data + vs->plane_size;
+		for (i = 0; i < vs->height / 2; i++) {
+			memcpy(dst, src, vs->width);
+			src += source_pitches[1];
+			dst += vs->width;
+		}
 		break;
 
 	case VDP_YCBCR_FORMAT_YV12:
-		memcpy(vs->data, source_data[0], source_pitches[0] * vs->height);
-		memcpy(vs->data + vs->plane_size, source_data[1], source_pitches[1] * vs->height / 2);
-		memcpy(vs->data + vs->plane_size + (vs->plane_size / 4), source_data[2], source_pitches[2] * vs->height / 2);
+		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
+			return VDP_STATUS_INVALID_CHROMA_TYPE;
+		src = source_data[0];
+		dst = vs->data;
+		for (i = 0; i < vs->height; i++) {
+			memcpy(dst, src, vs->width);
+			src += source_pitches[0];
+			dst += vs->width;
+		}
+		src = source_data[2];
+		dst = vs->data + vs->plane_size;
+		for (i = 0; i < vs->height / 2; i++) {
+			memcpy(dst, src, vs->width / 2);
+			src += source_pitches[1];
+			dst += vs->width / 2;
+		}
+		src = source_data[1];
+		dst = vs->data + vs->plane_size + vs->plane_size / 4;
+		for (i = 0; i < vs->height / 2; i++) {
+			memcpy(dst, src, vs->width / 2);
+			src += source_pitches[2];
+			dst += vs->width / 2;
+		}
 		break;
 	}
 

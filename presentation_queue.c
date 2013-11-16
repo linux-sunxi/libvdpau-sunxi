@@ -231,12 +231,34 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	memset(&layer_info, 0, sizeof(layer_info));
 	layer_info.pipe = 1;
 	layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
-	layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
 	layer_info.fb.format = DISP_FORMAT_YUV420;
 	layer_info.fb.seq = DISP_SEQ_UVUV;
+	switch (os->vs->source_format) {
+	case VDP_YCBCR_FORMAT_YUYV:
+		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+		layer_info.fb.format = DISP_FORMAT_YUV422;
+		layer_info.fb.seq = DISP_SEQ_YUYV;
+		break;
+	case VDP_YCBCR_FORMAT_UYVY:
+		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+		layer_info.fb.format = DISP_FORMAT_YUV422;
+		layer_info.fb.seq = DISP_SEQ_UYVY;
+		break;
+	case VDP_YCBCR_FORMAT_NV12:
+		layer_info.fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
+		break;
+	case VDP_YCBCR_FORMAT_YV12:
+		layer_info.fb.mode = DISP_MOD_NON_MB_PLANAR;
+		break;
+	default:
+	case INTERNAL_YCBCR_FORMAT:
+		layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
+		break;
+	}
 	layer_info.fb.br_swap = 0;
 	layer_info.fb.addr[0] = ve_virt2phys(os->vs->data) + 0x40000000;
 	layer_info.fb.addr[1] = ve_virt2phys(os->vs->data + os->vs->plane_size) + 0x40000000;
+	layer_info.fb.addr[2] = ve_virt2phys(os->vs->data + os->vs->plane_size + os->vs->plane_size / 4) + 0x40000000;
 
 	layer_info.fb.cs_mode = DISP_BT601;
 	layer_info.fb.size.width = os->vs->width;

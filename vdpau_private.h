@@ -28,6 +28,8 @@
 #include <vdpau/vdpau.h>
 #include <X11/Xlib.h>
 
+#define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
+
 typedef struct
 {
 	Display *display;
