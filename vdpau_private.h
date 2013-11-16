@@ -78,6 +78,11 @@ typedef struct
 typedef struct
 {
 	device_ctx_t *device;
+	int csc_change;
+	float brightness;
+	float contrast;
+	float saturation;
+	float hue;
 } mixer_ctx_t;
 
 typedef struct
@@ -87,6 +92,11 @@ typedef struct
 	uint32_t width, height;
 	video_surface_ctx_t *vs;
 	VdpRect video_src_rect, video_dst_rect;
+	int csc_change;
+	float brightness;
+	float contrast;
+	float saturation;
+	float hue;
 } output_surface_ctx_t;
 
 #ifndef ARRAY_SIZE

@@ -17,6 +17,7 @@
  *
  */
 
+#include <math.h>
 #include "vdpau_private.h"
 
 VdpStatus vdp_video_mixer_create(VdpDevice device, uint32_t feature_count, VdpVideoMixerFeature const *features, uint32_t parameter_count, VdpVideoMixerParameter const *parameters, void const *const *parameter_values, VdpVideoMixer *mixer)
@@ -30,6 +31,8 @@ VdpStatus vdp_video_mixer_create(VdpDevice device, uint32_t feature_count, VdpVi
 		return VDP_STATUS_RESOURCES;
 
 	mix->device = dev;
+	mix->contrast = 1.0;
+	mix->saturation = 1.0;
 
 	int handle = handle_create(mix);
 	if (handle == -1)
@@ -92,6 +95,12 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 			os->video_src_rect.y1 = os->vs->height;
 		}
 	}
+	os->csc_change = mix->csc_change;
+	os->brightness = mix->brightness;
+	os->contrast = mix->contrast;
+	os->saturation = mix->saturation;
+	os->hue = mix->hue;
+	mix->csc_change = 0;
 
 	if (layer_count != 0)
 		VDPAU_DBG_ONCE("Requested unimplemented additional layers");
@@ -145,6 +154,26 @@ VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer, uint32_t feat
 	return VDP_STATUS_ERROR;
 }
 
+static void set_csc_matrix(mixer_ctx_t *mix, const VdpCSCMatrix *matrix)
+{
+	mix->csc_change = 1;
+	// default contrast for full-range has 1.0 as luma coefficients
+	mix->contrast = ((*matrix)[0][0] + (*matrix)[1][0] + (*matrix)[2][0]) / 3;
+	// the way brightness and contrast work with this driver, brightness
+	// is the brightness of a "black" pixel
+	mix->brightness = ((*matrix)[0][1] + (*matrix)[1][1] + (*matrix)[2][1]) / 2 +
+	                  ((*matrix)[0][2] + (*matrix)[1][2] + (*matrix)[2][2]) / 2 +
+	                  (*matrix)[0][3] + (*matrix)[1][3] + (*matrix)[2][3];
+	mix->brightness /= 3;
+
+	float sin = (*matrix)[0][1] + (*matrix)[2][2];
+	float cos = (*matrix)[0][2] + (*matrix)[2][1];
+	float e = 0.001;
+	if (-e < cos && cos < e) mix->hue = M_PI;
+	else mix->hue = atanf(sin/cos);
+	mix->saturation = sqrtf(sin * sin + cos * cos) / (1.403 + 1.773);
+}
+
 VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer, uint32_t attribute_count, VdpVideoMixerAttribute const *attributes, void const *const *attribute_values)
 {
 	if (!attributes || !attribute_values)
@@ -154,6 +183,10 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer, uint32_t att
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	uint32_t i;
+	for (i = 0; i < attribute_count; i++)
+		if (attributes[i] == VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX)
+			set_csc_matrix(mix, (const VdpCSCMatrix *)attribute_values[i]);
 
 	return VDP_STATUS_OK;
 }
@@ -305,20 +338,29 @@ VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp, VdpColorStandard standard
 	if (procamp->struct_version > VDP_PROCAMP_VERSION)
 		return VDP_STATUS_INVALID_STRUCT_VERSION;
 
-	(*csc_matrix)[0][0] = 1.164000;
-	(*csc_matrix)[0][1] = 0.000000;
-	(*csc_matrix)[0][2] = 1.596000;
-	(*csc_matrix)[0][3] = -0.874165;
+	// BT.601 table
+	(*csc_matrix)[0][1] =  0.000;
+	(*csc_matrix)[0][2] =  1.403;
 
-	(*csc_matrix)[1][0] = 1.164000;
-	(*csc_matrix)[1][1] = -0.391000;
-	(*csc_matrix)[1][2] = -0.813000;
-	(*csc_matrix)[1][3] = 0.531326;
+	(*csc_matrix)[1][1] = -0.344;
+	(*csc_matrix)[1][2] = -0.714;
 
-	(*csc_matrix)[2][0] = 1.164000;
-	(*csc_matrix)[2][1] = 2.018000;
-	(*csc_matrix)[2][2] = 0.000000;
-	(*csc_matrix)[2][3] = -1.085992;
+	(*csc_matrix)[2][1] =  1.773;
+	(*csc_matrix)[2][2] =  0.000;
+
+	float uvcos = procamp->saturation * cosf(procamp->hue);
+	float uvsin = procamp->saturation * sinf(procamp->hue);
+	int i;
+	for (i = 0; i < 3; i++) {
+		(*csc_matrix)[i][0] = procamp->contrast;
+		float u = (*csc_matrix)[i][1] * uvcos + (*csc_matrix)[i][2] * uvsin;
+		float v = (*csc_matrix)[i][1] * uvsin + (*csc_matrix)[i][2] * uvcos;
+		(*csc_matrix)[i][1] = u;
+		(*csc_matrix)[i][2] = v;
+		(*csc_matrix)[i][3] = - (u + v) / 2;
+		(*csc_matrix)[i][3] += 0.5 - procamp->contrast / 2;
+		(*csc_matrix)[i][3] += procamp->brightness;
+	}
 
 	return VDP_STATUS_OK;
 }
