@@ -68,34 +68,32 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device, Drawable dr
 	uint32_t args[4] = { 0, DISP_LAYER_WORK_MODE_SCALER, 0, 0 };
 	qt->layer = ioctl(qt->fd, DISP_CMD_LAYER_REQUEST, args);
 	if (qt->layer == 0)
-	{
-		close(qt->fd);
-		free(qt);
-		return VDP_STATUS_RESOURCES;
-	}
+		goto out_layer;
+
+	args[1] = DISP_LAYER_WORK_MODE_NORMAL;
+	qt->layer_top = ioctl(qt->fd, DISP_CMD_LAYER_REQUEST, args);
+	if (qt->layer_top == 0)
+		goto out_layer_top;
 
 	XSetWindowBackground(dev->display, drawable, 0x000102);
 
-	__disp_colorkey_t ck;
-	ck.ck_max.red = ck.ck_min.red = 0;
-	ck.ck_max.green = ck.ck_min.green = 1;
-	ck.ck_max.blue = ck.ck_min.blue = 2;
-	ck.red_match_rule = 2;
-	ck.green_match_rule = 2;
-	ck.blue_match_rule = 2;
-
-	args[1] = (unsigned long)(&ck);
-	ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
-
 	int handle = handle_create(qt);
 	if (handle == -1)
-	{
-		free(qt);
-		return VDP_STATUS_RESOURCES;
-	}
+		goto out_handle_create;
 
 	*target = handle;
 	return VDP_STATUS_OK;
+
+out_handle_create:
+	args[1] = qt->layer_top;
+	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
+out_layer_top:
+	args[1] = qt->layer;
+	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
+out_layer:
+	close(qt->fd);
+	free(qt);
+	return VDP_STATUS_RESOURCES;
 }
 
 VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget presentation_queue_target)
@@ -105,6 +103,10 @@ VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget prese
 		return VDP_STATUS_INVALID_HANDLE;
 
 	uint32_t args[4] = { 0, qt->layer, 0, 0 };
+	ioctl(qt->fd, DISP_CMD_LAYER_CLOSE, args);
+	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
+
+	args[1] = qt->layer_top;
 	ioctl(qt->fd, DISP_CMD_LAYER_CLOSE, args);
 	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
 
@@ -213,12 +215,6 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (!(os->vs))
-	{
-		VDPAU_DBG("trying to display empty surface");
-		return VDP_STATUS_OK;
-	}
-
 	if (earliest_presentation_time != 0)
 		VDPAU_DBG_ONCE("Presentation time not supported");
 
@@ -227,9 +223,10 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen), 0, 0, &x, &y, &c);
 	XClearWindow(q->device->display, q->target->drawable);
 
+	// VIDEO layer
 	__disp_layer_info_t layer_info;
 	memset(&layer_info, 0, sizeof(layer_info));
-	layer_info.pipe = 1;
+	layer_info.pipe = 0;
 	layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
 	layer_info.fb.format = DISP_FORMAT_YUV420;
 	layer_info.fb.seq = DISP_SEQ_UVUV;
@@ -271,7 +268,6 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	layer_info.scn_win.y = y + os->video_y;
 	layer_info.scn_win.width = os->video_width;
 	layer_info.scn_win.height = os->video_height;
-	layer_info.ck_enable = 1;
 
 	if (layer_info.scn_win.y < 0)
 	{
@@ -285,7 +281,43 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	uint32_t args[4] = { 0, q->target->layer, (unsigned long)(&layer_info), 0 };
 	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
-	ioctl(q->target->fd, DISP_CMD_LAYER_BOTTOM, args);
+	ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
+	ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+
+	// TOP layer
+	memset(&layer_info, 0, sizeof(layer_info));
+	layer_info.pipe = 1;
+	layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
+	layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+	layer_info.fb.format = DISP_FORMAT_ARGB8888;
+	layer_info.fb.seq = DISP_SEQ_ARGB;
+	switch (os->rgba_format)
+	{
+	case VDP_RGBA_FORMAT_B8G8R8A8:
+		layer_info.fb.br_swap = 1;
+		break;
+	case VDP_RGBA_FORMAT_R8G8B8A8:
+	default:
+		layer_info.fb.br_swap = 0;
+		break;
+	}
+	layer_info.fb.addr[0] = ve_virt2phys(os->data) + 0x40000000;
+	layer_info.fb.cs_mode = DISP_BT601;
+	layer_info.fb.size.width = os->width;
+	layer_info.fb.size.height = os->height;
+	layer_info.src_win.x = 0;
+	layer_info.src_win.y = 0;
+	layer_info.src_win.width = os->width;
+	layer_info.src_win.height = os->height;
+	layer_info.scn_win.x = x;
+	layer_info.scn_win.y = y;
+	layer_info.scn_win.width = clip_width;
+	layer_info.scn_win.height = clip_height;
+
+	args[1] = q->target->layer_top;
+	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
+
+	ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
 	ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 
 	return VDP_STATUS_OK;

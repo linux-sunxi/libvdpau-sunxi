@@ -67,6 +67,7 @@ typedef struct
 	Drawable drawable;
 	int fd;
 	int layer;
+	int layer_top;
 } queue_target_ctx_t;
 
 typedef struct
