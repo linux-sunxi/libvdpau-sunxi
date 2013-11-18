@@ -37,6 +37,7 @@ typedef struct
 	VdpPreemptionCallback *preemption_callback;
 	void *preemption_callback_context;
 	int fd;
+	int g2d_fd;
 } device_ctx_t;
 
 typedef struct
@@ -87,6 +88,7 @@ typedef struct
 	uint32_t width, height;
 	video_surface_ctx_t *vs;
 	uint32_t video_x, video_y, video_width, video_height;
+	void *data;
 } output_surface_ctx_t;
 
 #ifndef ARRAY_SIZE
