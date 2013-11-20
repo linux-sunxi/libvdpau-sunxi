@@ -69,6 +69,7 @@ VdpStatus vdp_video_surface_create(VdpDevice device, VdpChromaType chroma_type, 
 	int handle = handle_create(vs);
 	if (handle == -1)
 	{
+		ve_free(vs->data);
 		free(vs);
 		return VDP_STATUS_RESOURCES;
 	}
