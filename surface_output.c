@@ -263,9 +263,46 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	VDPAU_DBG_ONCE("%s called but unimplemented!", __func__);
+	bitmap_surface_ctx_t *in = handle_get(source_surface);
+	if (!in)
+		return VDP_STATUS_INVALID_HANDLE;
 
+	if (colors || flags)
+		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
+	g2d_blt args;
+
+	// use defaults for null source/destination rects
+	VdpRect sr = {0, 0, in->width, in->height};
+	if (source_rect) {
+		sr = *source_rect;
+	}
+	VdpRect dr = {0, 0, out->width, out->height};
+	if (destination_rect) {
+		dr = *destination_rect;
+	}
+	
+	args.flag = G2D_BLT_PIXEL_ALPHA;
+	args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
+	args.src_image.w = in->width;
+	args.src_image.h = in->height;
+	args.src_image.format = G2D_FMT_ARGB_AYUV8888;
+	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.src_rect.x = sr.x0;
+	args.src_rect.y = sr.y0;
+	args.src_rect.w = sr.x1 - sr.x0;
+	args.src_rect.h = sr.y1 - sr.y0;
+	args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+	args.dst_image.w = out->width;
+	args.dst_image.h = out->height;
+	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.dst_x = dr.x0;
+	args.dst_y = dr.y0;
+	args.color = 0;
+	args.alpha = 0;
+
+	ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
 
 	return VDP_STATUS_OK;
 }

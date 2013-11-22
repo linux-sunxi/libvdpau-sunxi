@@ -92,6 +92,16 @@ typedef struct
 	void *data;
 } output_surface_ctx_t;
 
+typedef struct
+{
+	device_ctx_t *device;
+	VdpRGBAFormat rgba_format;
+	uint32_t width, height;
+	VdpBool frequently_accessed;
+	uint32_t video_x, video_y, video_width, video_height;
+	void *data;
+} bitmap_surface_ctx_t;
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
 #endif
