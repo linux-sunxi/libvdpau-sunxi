@@ -221,6 +221,16 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
 	g2d_blt args;
+	
+	// use defaults for null source/destination rects
+	VdpRect sr = {0, 0, in->width, in->height};
+	if (source_rect) {
+		sr = *source_rect;
+	}
+	VdpRect dr = {0, 0, out->width, out->height};
+	if (destination_rect) {
+		dr = *destination_rect;
+	}
 
 	args.flag = G2D_BLT_PIXEL_ALPHA;
 	args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
@@ -228,17 +238,17 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	args.src_image.h = in->height;
 	args.src_image.format = G2D_FMT_ARGB_AYUV8888;
 	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.src_rect.x = source_rect->x0;
-	args.src_rect.y = source_rect->y0;
-	args.src_rect.w = source_rect->x1 - source_rect->x0;
-	args.src_rect.h = source_rect->y1 - source_rect->y0;
+	args.src_rect.x = sr.x0;
+	args.src_rect.y = sr.y0;
+	args.src_rect.w = sr.x1 - sr.x0;
+	args.src_rect.h = sr.y1 - sr.y0;
 	args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
 	args.dst_image.w = out->width;
 	args.dst_image.h = out->height;
 	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
 	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.dst_x = destination_rect->x0;
-	args.dst_y = destination_rect->y0;
+	args.dst_x = dr.x0;
+	args.dst_y = dr.y0;
 	args.color = 0;
 	args.alpha = 0;
 
