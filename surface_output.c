@@ -214,45 +214,66 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 		return VDP_STATUS_INVALID_HANDLE;
 
 	output_surface_ctx_t *in = handle_get(source_surface);
-	if (!in)
-		return VDP_STATUS_INVALID_HANDLE;
 
 	if (colors || flags)
 		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
 	g2d_blt args;
 	
-	// use defaults for null source/destination rects
-	VdpRect sr = {0, 0, in->width, in->height};
-	if (source_rect) {
-		sr = *source_rect;
-	}
-	VdpRect dr = {0, 0, out->width, out->height};
-	if (destination_rect) {
-		dr = *destination_rect;
-	}
+	// set up source/destination rects using defaults where required
+	VdpRect s_rect = {0, 0, 0, 0};
+	VdpRect d_rect = {0, 0, out->width, out->height};
+	s_rect.x1 = in ? in->width : 1;
+	s_rect.y1 = in ? in->height : 1;
 
-	args.flag = G2D_BLT_PIXEL_ALPHA;
-	args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
-	args.src_image.w = in->width;
-	args.src_image.h = in->height;
-	args.src_image.format = G2D_FMT_ARGB_AYUV8888;
-	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.src_rect.x = sr.x0;
-	args.src_rect.y = sr.y0;
-	args.src_rect.w = sr.x1 - sr.x0;
-	args.src_rect.h = sr.y1 - sr.y0;
-	args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
-	args.dst_image.w = out->width;
-	args.dst_image.h = out->height;
-	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.dst_x = dr.x0;
-	args.dst_y = dr.y0;
-	args.color = 0;
-	args.alpha = 0;
+	if (source_rect)
+		s_rect = *source_rect;
+	if (destination_rect)
+		d_rect = *destination_rect;
 
-	ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
+	if (!in)
+	{
+		g2d_fillrect args;
+	
+		args.flag = G2D_FIL_PIXEL_ALPHA;
+		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+		args.dst_image.w = out->width;
+		args.dst_image.h = out->height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.dst_rect.x = d_rect.x0;
+		args.dst_rect.y = d_rect.y0;
+		args.dst_rect.w = d_rect.x1 - d_rect.x0;
+		args.dst_rect.h = d_rect.y1 - d_rect.y0;
+		args.color = 0xFFFFFFFF;
+		args.alpha = 0xFFFFFFFF;
+	
+		ioctl(out->device->g2d_fd, G2D_CMD_FILLRECT, &args);
+	}
+	else
+	{
+		args.flag = G2D_BLT_PIXEL_ALPHA;
+		args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
+		args.src_image.w = in->width;
+		args.src_image.h = in->height;
+		args.src_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.src_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.src_rect.x = s_rect.x0;
+		args.src_rect.y = s_rect.y0;
+		args.src_rect.w = s_rect.x1 - s_rect.x0;
+		args.src_rect.h = s_rect.y1 - s_rect.y0;
+		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+		args.dst_image.w = out->width;
+		args.dst_image.h = out->height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.dst_x = d_rect.x0;
+		args.dst_y = d_rect.y0;
+		args.color = 0;
+		args.alpha = 0;
+	
+		ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
+	}
 
 	return VDP_STATUS_OK;
 }
@@ -264,46 +285,66 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 		return VDP_STATUS_INVALID_HANDLE;
 
 	bitmap_surface_ctx_t *in = handle_get(source_surface);
-	if (!in)
-		return VDP_STATUS_INVALID_HANDLE;
 
 	if (colors || flags)
 		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
 	g2d_blt args;
 
-	// use defaults for null source/destination rects
-	VdpRect sr = {0, 0, in->width, in->height};
-	if (source_rect) {
-		sr = *source_rect;
-	}
-	VdpRect dr = {0, 0, out->width, out->height};
-	if (destination_rect) {
-		dr = *destination_rect;
-	}
+	// set up source/destination rects using defaults where required
+	VdpRect s_rect = {0, 0, 0, 0};
+	VdpRect d_rect = {0, 0, out->width, out->height};
+	s_rect.x1 = in ? in->width : 1;
+	s_rect.y1 = in ? in->height : 1;
+
+	if (source_rect)
+		s_rect = *source_rect;
+	if (destination_rect)
+		d_rect = *destination_rect;
+
+	if (!in)
+	{
+		g2d_fillrect args;
 	
-	args.flag = G2D_BLT_PIXEL_ALPHA;
-	args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
-	args.src_image.w = in->width;
-	args.src_image.h = in->height;
-	args.src_image.format = G2D_FMT_ARGB_AYUV8888;
-	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.src_rect.x = sr.x0;
-	args.src_rect.y = sr.y0;
-	args.src_rect.w = sr.x1 - sr.x0;
-	args.src_rect.h = sr.y1 - sr.y0;
-	args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
-	args.dst_image.w = out->width;
-	args.dst_image.h = out->height;
-	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.dst_x = dr.x0;
-	args.dst_y = dr.y0;
-	args.color = 0;
-	args.alpha = 0;
+		args.flag = G2D_FIL_PIXEL_ALPHA;
+		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+		args.dst_image.w = out->width;
+		args.dst_image.h = out->height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.dst_rect.x = d_rect.x0;
+		args.dst_rect.y = d_rect.y0;
+		args.dst_rect.w = d_rect.x1 - d_rect.x0;
+		args.dst_rect.h = d_rect.y1 - d_rect.y0;
+		args.color = 0xFFFFFFFF;
+		args.alpha = 0xFFFFFFFF;
+	
+		ioctl(out->device->g2d_fd, G2D_CMD_FILLRECT, &args);
+	}
+	else
+	{
+		args.flag = G2D_BLT_PIXEL_ALPHA;
+		args.src_image.addr[0] = ve_virt2phys(in->data) + 0x40000000;
+		args.src_image.w = in->width;
+		args.src_image.h = in->height;
+		args.src_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.src_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.src_rect.x = s_rect.x0;
+		args.src_rect.y = s_rect.y0;
+		args.src_rect.w = s_rect.x1 - s_rect.x0;
+		args.src_rect.h = s_rect.y1 - s_rect.y0;
+		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+		args.dst_image.w = out->width;
+		args.dst_image.h = out->height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.dst_x = d_rect.x0;
+		args.dst_y = d_rect.y0;
+		args.color = 0;
+		args.alpha = 0;
 
-	ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
-
+		ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
+	}
 	return VDP_STATUS_OK;
 }
 

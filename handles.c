@@ -57,6 +57,9 @@ int handle_create(void *data)
 
 void *handle_get(int handle)
 {
+	if (handle == VDP_INVALID_HANDLE)
+		return NULL;
+
 	int index = handle - 1;
 	if (index < ht.size)
 		return ht.data[index];
