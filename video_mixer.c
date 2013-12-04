@@ -300,20 +300,20 @@ VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp, VdpColorStandard standard
 	if (procamp->struct_version > VDP_PROCAMP_VERSION)
 		return VDP_STATUS_INVALID_STRUCT_VERSION;
 
-	*csc_matrix[0][0] = 1.164000;
-	*csc_matrix[0][1] = 0.000000;
-	*csc_matrix[0][2] = 1.596000;
-	*csc_matrix[0][3] = -0.874165;
+	(*csc_matrix)[0][0] = 1.164000;
+	(*csc_matrix)[0][1] = 0.000000;
+	(*csc_matrix)[0][2] = 1.596000;
+	(*csc_matrix)[0][3] = -0.874165;
 
-	*csc_matrix[1][0] = 1.164000;
-	*csc_matrix[1][1] = -0.391000;
-	*csc_matrix[1][2] = -0.813000;
-	*csc_matrix[1][3] = 0.531326;
+	(*csc_matrix)[1][0] = 1.164000;
+	(*csc_matrix)[1][1] = -0.391000;
+	(*csc_matrix)[1][2] = -0.813000;
+	(*csc_matrix)[1][3] = 0.531326;
 
-	*csc_matrix[2][0] = 1.164000;
-	*csc_matrix[2][1] = 2.018000;
-	*csc_matrix[2][2] = 0.000000;
-	*csc_matrix[2][3] = -1.085992;
+	(*csc_matrix)[2][0] = 1.164000;
+	(*csc_matrix)[2][1] = 2.018000;
+	(*csc_matrix)[2][2] = 0.000000;
+	(*csc_matrix)[2][3] = -1.085992;
 
 	return VDP_STATUS_OK;
 }
