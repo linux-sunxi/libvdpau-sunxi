@@ -86,7 +86,7 @@ typedef struct
 	VdpRGBAFormat rgba_format;
 	uint32_t width, height;
 	video_surface_ctx_t *vs;
-	uint32_t video_x, video_y, video_width, video_height;
+	VdpRect video_src_rect, video_dst_rect;
 } output_surface_ctx_t;
 
 #ifndef ARRAY_SIZE

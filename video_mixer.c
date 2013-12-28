@@ -82,10 +82,15 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 
 	if (destination_video_rect)
 	{
-		os->video_x = destination_video_rect->x0;
-		os->video_y = destination_video_rect->y0;
-		os->video_width = destination_video_rect->x1 - destination_video_rect->x0;
-		os->video_height = destination_video_rect->y1 - destination_video_rect->y0;
+		os->video_dst_rect = *destination_video_rect;
+		if (video_source_rect)
+			os->video_src_rect = *video_source_rect;
+		else
+		{
+			os->video_src_rect.x0 = os->video_src_rect.y0 = 0;
+			os->video_src_rect.x1 = os->vs->width;
+			os->video_src_rect.y1 = os->vs->height;
+		}
 	}
 
 	if (layer_count != 0)

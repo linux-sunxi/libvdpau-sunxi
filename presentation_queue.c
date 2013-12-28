@@ -263,14 +263,14 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	layer_info.fb.cs_mode = DISP_BT601;
 	layer_info.fb.size.width = os->vs->width;
 	layer_info.fb.size.height = os->vs->height;
-	layer_info.src_win.x = 0;
-	layer_info.src_win.y = 0;
-	layer_info.src_win.width = os->vs->width;
-	layer_info.src_win.height = os->vs->height;
-	layer_info.scn_win.x = x + os->video_x;
-	layer_info.scn_win.y = y + os->video_y;
-	layer_info.scn_win.width = os->video_width;
-	layer_info.scn_win.height = os->video_height;
+	layer_info.src_win.x = os->video_src_rect.x0;
+	layer_info.src_win.y = os->video_src_rect.y0;
+	layer_info.src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
+	layer_info.src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
+	layer_info.scn_win.x = x + os->video_dst_rect.x0;
+	layer_info.scn_win.y = y + os->video_dst_rect.y0;
+	layer_info.scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
+	layer_info.scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
 	layer_info.ck_enable = 1;
 
 	if (layer_info.scn_win.y < 0)
