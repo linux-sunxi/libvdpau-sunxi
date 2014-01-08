@@ -26,7 +26,7 @@
 int h264_init(decoder_ctx_t *decoder)
 {
 	int extra_data_size = 320 * 1024;
-	if (ve_get_version() == 0x1625)
+	if (ve_get_version() == 0x1625 || decoder->width >= 2048)
 	{
 		// Engine version 0x1625 needs two extra buffers
 		extra_data_size += ((decoder->width - 1) / 16 + 32) * 192;
@@ -582,17 +582,18 @@ int h264_decode(decoder_ctx_t *decoder, VdpPictureInfoH264 const *info, const in
 	}
 
 	// activate H264 engine
-	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1, c->regs + VE_CTRL);
+	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1
+		| (decoder->width >= 2048 ? (0x1 << 21) : 0x0), c->regs + VE_CTRL);
 
 	// some buffers
 	uint32_t extra_buffers = ve_virt2phys(decoder->extra_data);
 	writel(extra_buffers, c->regs + VE_H264_EXTRA_BUFFER1);
 	writel(extra_buffers + 0x48000, c->regs + VE_H264_EXTRA_BUFFER2);
-	if (ve_get_version() == 0x1625)
+	if (ve_get_version() == 0x1625 || decoder->width >= 2048)
 	{
 		int size = (c->picture_width_in_mbs_minus1 + 32) * 192;
 		size = (size + 4095) & ~4095;
-		writel(0xa, c->regs + 0x50);
+		writel(decoder->width >= 2048 ? 0x5 : 0xa, c->regs + 0x50);
 		writel(extra_buffers + 0x50000, c->regs + 0x54);
 		writel(extra_buffers + 0x50000 + size, c->regs + 0x58);
 	}

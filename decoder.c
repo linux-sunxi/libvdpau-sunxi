@@ -154,8 +154,8 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device, VdpDecoderProfile pro
 
 	// guessed in lack of documentation, bigger pictures should be possible
 	*max_level = 16;
-	*max_width = 2048;
-	*max_height = 1152;
+	*max_width = 3840;
+	*max_height = 2160;
 	*max_macroblocks = (*max_width * *max_height) / (16 * 16);
 
 	switch (profile)
