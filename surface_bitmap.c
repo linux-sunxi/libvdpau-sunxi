@@ -129,7 +129,7 @@ VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface, void cons
 	VdpRect d_rect = {0, 0, out->width, out->height};
 	if (destination_rect)
 		d_rect = *destination_rect;
-	
+
 	if (0 == d_rect.x0 && out->width == d_rect.x1 && source_pitches[0] == d_rect.x1) {
 		// full width
 		const int bytes_to_copy =

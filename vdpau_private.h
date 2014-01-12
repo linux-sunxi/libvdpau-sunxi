@@ -98,7 +98,6 @@ typedef struct
 	VdpRGBAFormat rgba_format;
 	uint32_t width, height;
 	VdpBool frequently_accessed;
-	uint32_t video_x, video_y, video_width, video_height;
 	void *data;
 } bitmap_surface_ctx_t;
 

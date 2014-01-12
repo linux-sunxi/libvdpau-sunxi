@@ -219,7 +219,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
 	g2d_blt args;
-	
+
 	// set up source/destination rects using defaults where required
 	VdpRect s_rect = {0, 0, 0, 0};
 	VdpRect d_rect = {0, 0, out->width, out->height};
@@ -234,7 +234,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	if (!in)
 	{
 		g2d_fillrect args;
-	
+
 		args.flag = G2D_FIL_PIXEL_ALPHA;
 		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
 		args.dst_image.w = out->width;
@@ -247,7 +247,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 		args.dst_rect.h = d_rect.y1 - d_rect.y0;
 		args.color = 0xFFFFFFFF;
 		args.alpha = 0xFFFFFFFF;
-	
+
 		ioctl(out->device->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
 	else
@@ -271,7 +271,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 		args.dst_y = d_rect.y0;
 		args.color = 0;
 		args.alpha = 0;
-	
+
 		ioctl(out->device->g2d_fd, G2D_CMD_BITBLT, &args);
 	}
 
@@ -305,7 +305,7 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	if (!in)
 	{
 		g2d_fillrect args;
-	
+
 		args.flag = G2D_FIL_PIXEL_ALPHA;
 		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
 		args.dst_image.w = out->width;
@@ -318,7 +318,7 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 		args.dst_rect.h = d_rect.y1 - d_rect.y0;
 		args.color = 0xFFFFFFFF;
 		args.alpha = 0xFFFFFFFF;
-	
+
 		ioctl(out->device->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
 	else
