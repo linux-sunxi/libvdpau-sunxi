@@ -21,8 +21,8 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stropts.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include "sunxi_disp_ioctl.h"
 #include "ve.h"
 

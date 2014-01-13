@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stropts.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include "ve.h"
 
