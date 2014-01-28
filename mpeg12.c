@@ -48,13 +48,13 @@ static int mpeg_find_startcode(const uint8_t *data, int len)
 	return 0;
 }
 
-int mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfoMPEG1Or2 const *info, const int len, video_surface_ctx_t *output)
+static VdpStatus mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfo const *_info, const int len, video_surface_ctx_t *output)
 {
+	VdpPictureInfoMPEG1Or2 const *info = (VdpPictureInfoMPEG1Or2 const *)_info;
 	int start_offset = mpeg_find_startcode(decoder->data, len);
 
 	int i;
 	void *ve_regs = ve_get_regs();
-	output->source_format = INTERNAL_YCBCR_FORMAT;
 
 	// activate MPEG engine
 	writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x0, ve_regs + VE_CTRL);
@@ -140,5 +140,11 @@ int mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfoMPEG1Or2 const *info, co
 	// stop MPEG engine
 	writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x7, ve_regs + VE_CTRL);
 
-	return 1;
+	return VDP_STATUS_OK;
+}
+
+VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder)
+{
+	decoder->decode = mpeg12_decode;
+	return VDP_STATUS_OK;
 }

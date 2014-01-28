@@ -21,10 +21,6 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
-int mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
-int h264_decode(decoder_ctx_t *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
-int h264_init(decoder_ctx_t *decoder);
-
 VdpStatus vdp_decoder_create(VdpDevice device, VdpDecoderProfile profile, uint32_t width, uint32_t height, uint32_t max_references, VdpDecoder *decoder)
 {
 	device_ctx_t *dev = handle_get(device);
@@ -36,7 +32,7 @@ VdpStatus vdp_decoder_create(VdpDevice device, VdpDecoderProfile profile, uint32
 
 	decoder_ctx_t *dec = calloc(1, sizeof(decoder_ctx_t));
 	if (!dec)
-		return VDP_STATUS_RESOURCES;
+		goto err_ctx;
 
 	dec->device = dev;
 	dec->profile = profile;
@@ -45,43 +41,47 @@ VdpStatus vdp_decoder_create(VdpDevice device, VdpDecoderProfile profile, uint32
 
 	dec->data = ve_malloc(VBV_SIZE);
 	if (!(dec->data))
-	{
-		free(dec);
-		return VDP_STATUS_RESOURCES;
-	}
+		goto err_data;
 
+	VdpStatus ret;
 	switch (profile)
 	{
 	case VDP_DECODER_PROFILE_MPEG1:
 	case VDP_DECODER_PROFILE_MPEG2_SIMPLE:
 	case VDP_DECODER_PROFILE_MPEG2_MAIN:
-		dec->decode = mpeg12_decode;
+		ret = new_decoder_mpeg12(dec);
 		break;
 
 	case VDP_DECODER_PROFILE_H264_BASELINE:
 	case VDP_DECODER_PROFILE_H264_MAIN:
 	case VDP_DECODER_PROFILE_H264_HIGH:
-		if (h264_init(dec))
-			dec->decode = h264_decode;
+		ret = new_decoder_h264(dec);
+		break;
+
+	default:
+		ret = VDP_STATUS_INVALID_DECODER_PROFILE;
 		break;
 	}
 
-	if (!dec->decode)
-	{
-		free(dec);
-		return VDP_STATUS_INVALID_DECODER_PROFILE;
-	}
+	if (ret != VDP_STATUS_OK)
+		goto err_decoder;
 
 	int handle = handle_create(dec);
 	if (handle == -1)
-	{
-		free(dec);
-		return VDP_STATUS_RESOURCES;
-	}
+		goto err_handle;
 
 	*decoder = handle;
-
 	return VDP_STATUS_OK;
+
+err_handle:
+	if (dec->private_free)
+		dec->private_free(dec);
+err_decoder:
+	ve_free(dec->data);
+err_data:
+	free(dec);
+err_ctx:
+	return VDP_STATUS_RESOURCES;
 }
 
 VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
@@ -90,8 +90,9 @@ VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
 	if (!dec)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (dec->extra_data)
-		ve_free(dec->extra_data);
+	if (dec->private_free)
+		dec->private_free(dec);
+
 	ve_free(dec->data);
 
 	handle_destroy(decoder);
@@ -128,6 +129,7 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder, VdpVideoSurface target, VdpPict
 	if (!vid)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	vid->source_format = INTERNAL_YCBCR_FORMAT;
 	unsigned int i, pos = 0;
 
 	for (i = 0; i < bitstream_buffer_count; i++)
@@ -137,10 +139,7 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder, VdpVideoSurface target, VdpPict
 	}
 	ve_flush_cache(dec->data, pos);
 
-	if (dec->decode(dec, picture_info, pos, vid))
-		return VDP_STATUS_OK;
-
-	return VDP_STATUS_ERROR;
+	return dec->decode(dec, picture_info, pos, vid);
 }
 
 VdpStatus vdp_decoder_query_capabilities(VdpDevice device, VdpDecoderProfile profile, VdpBool *is_supported, uint32_t *max_level, uint32_t *max_macroblocks, uint32_t *max_width, uint32_t *max_height)
