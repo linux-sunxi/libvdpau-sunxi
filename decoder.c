@@ -58,6 +58,11 @@ VdpStatus vdp_decoder_create(VdpDevice device, VdpDecoderProfile profile, uint32
 		ret = new_decoder_h264(dec);
 		break;
 
+	case VDP_DECODER_PROFILE_MPEG4_PART2_SP:
+	case VDP_DECODER_PROFILE_MPEG4_PART2_ASP:
+		ret = new_decoder_mp4(dec);
+		break;
+
 	default:
 		ret = VDP_STATUS_INVALID_DECODER_PROFILE;
 		break;
@@ -165,6 +170,8 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device, VdpDecoderProfile pro
 	case VDP_DECODER_PROFILE_H264_BASELINE:
 	case VDP_DECODER_PROFILE_H264_MAIN:
 	case VDP_DECODER_PROFILE_H264_HIGH:
+	case VDP_DECODER_PROFILE_MPEG4_PART2_SP:
+	case VDP_DECODER_PROFILE_MPEG4_PART2_ASP:
 		*is_supported = VDP_TRUE;
 		break;
 

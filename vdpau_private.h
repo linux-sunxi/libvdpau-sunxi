@@ -115,6 +115,7 @@ typedef struct
 
 VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
+VdpStatus new_decoder_mp4(decoder_ctx_t *decoder);
 
 int handle_create(void *data);
 void *handle_get(int handle);
