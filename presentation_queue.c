@@ -320,8 +320,8 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	layer_info.src_win.height = os->height;
 	layer_info.scn_win.x = x;
 	layer_info.scn_win.y = y;
-	layer_info.scn_win.width = clip_width;
-	layer_info.scn_win.height = clip_height;
+	layer_info.scn_win.width = clip_width ? clip_width : os->width;
+	layer_info.scn_win.height = clip_height ? clip_height : os->height;
 
 	uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
 	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
