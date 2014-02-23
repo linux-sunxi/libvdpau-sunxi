@@ -21,8 +21,8 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stropts.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include "sunxi_disp_ioctl.h"
 #include "ve.h"
 
@@ -262,14 +262,14 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		layer_info.fb.cs_mode = DISP_BT601;
 		layer_info.fb.size.width = os->vs->width;
 		layer_info.fb.size.height = os->vs->height;
-		layer_info.src_win.x = 0;
-		layer_info.src_win.y = 0;
-		layer_info.src_win.width = os->vs->width;
-		layer_info.src_win.height = os->vs->height;
-		layer_info.scn_win.x = x + os->video_x;
-		layer_info.scn_win.y = y + os->video_y;
-		layer_info.scn_win.width = os->video_width;
-		layer_info.scn_win.height = os->video_height;
+		layer_info.src_win.x = os->video_src_rect.x0;
+		layer_info.src_win.y = os->video_src_rect.y0;
+		layer_info.src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
+		layer_info.src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
+		layer_info.scn_win.x = x + os->video_dst_rect.x0;
+		layer_info.scn_win.y = y + os->video_dst_rect.y0;
+		layer_info.scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
+		layer_info.scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
 
 		if (layer_info.scn_win.y < 0)
 		{
@@ -285,6 +285,25 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 
 		ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
 		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+		// Note: might be more reliable (but slower and problematic when there
+		// are driver issues and the GET functions return wrong values) to query the
+		// old values instead of relying on our internal csc_change.
+		// Since the driver calculates a matrix out of these values after each
+		// set doing this unconditionally is costly.
+		if (os->csc_change) {
+			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
+			args[2] = 0xff * os->brightness + 0x20;
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
+			args[2] = 0x20 * os->contrast;
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
+			args[2] = 0x20 * os->saturation;
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args);
+			// hue scale is randomly chosen, no idea how it maps exactly
+			args[2] = (32 / 3.14) * os->hue + 0x20;
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
+			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
+			os->csc_change = 0;
+		}
 	}
 	else
 	{

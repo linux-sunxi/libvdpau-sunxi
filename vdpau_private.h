@@ -40,7 +40,7 @@ typedef struct
 	int g2d_fd;
 } device_ctx_t;
 
-typedef struct
+typedef struct video_surface_ctx_struct
 {
 	device_ctx_t *device;
 	uint32_t width, height;
@@ -48,8 +48,8 @@ typedef struct
 	VdpYCbCrFormat source_format;
 	void *data;
 	int plane_size;
-	void *extra_data;
-	int pos;
+	void *decoder_private;
+	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 } video_surface_ctx_t;
 
 typedef struct decoder_ctx_struct
@@ -58,8 +58,9 @@ typedef struct decoder_ctx_struct
 	VdpDecoderProfile profile;
 	void *data;
 	device_ctx_t *device;
-	int (*decode)(struct decoder_ctx_struct *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
-	void *extra_data;
+	VdpStatus (*decode)(struct decoder_ctx_struct *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
+	void *private;
+	void (*private_free)(struct decoder_ctx_struct *decoder);
 } decoder_ctx_t;
 
 typedef struct
@@ -80,6 +81,11 @@ typedef struct
 typedef struct
 {
 	device_ctx_t *device;
+	int csc_change;
+	float brightness;
+	float contrast;
+	float saturation;
+	float hue;
 } mixer_ctx_t;
 
 typedef struct
@@ -88,8 +94,13 @@ typedef struct
 	VdpRGBAFormat rgba_format;
 	uint32_t width, height;
 	video_surface_ctx_t *vs;
-	uint32_t video_x, video_y, video_width, video_height;
+	VdpRect video_src_rect, video_dst_rect;
 	void *data;
+	int csc_change;
+	float brightness;
+	float contrast;
+	float saturation;
+	float hue;
 } output_surface_ctx_t;
 
 typedef struct
@@ -113,6 +124,10 @@ typedef struct
 #define VDPAU_DBG(format, ...)
 #define VDPAU_DBG_ONCE(format, ...)
 #endif
+
+VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
+VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
+VdpStatus new_decoder_mp4(decoder_ctx_t *decoder);
 
 int handle_create(void *data);
 void *handle_get(int handle);

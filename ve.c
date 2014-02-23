@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stropts.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include "ve.h"
 
@@ -105,7 +105,7 @@ int ve_open(void)
 
 	ioctl(fd, IOCTL_ENGINE_REQ, 0);
 	ioctl(fd, IOCTL_ENABLE_VE, 0);
-	ioctl(fd, IOCTL_SET_VE_FREQ, 240);
+	ioctl(fd, IOCTL_SET_VE_FREQ, 320);
 	ioctl(fd, IOCTL_RESET_VE, 0);
 
 	writel(0x00130007, regs + VE_CTRL);

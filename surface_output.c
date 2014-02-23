@@ -44,6 +44,8 @@ VdpStatus vdp_output_surface_create(VdpDevice device, VdpRGBAFormat rgba_format,
 	out->width = width;
 	out->height = height;
 	out->rgba_format = rgba_format;
+	out->contrast = 1.0;
+	out->saturation = 1.0;
 	out->device = dev;
 
 	out->data = ve_malloc(width * height * 4);

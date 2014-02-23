@@ -85,8 +85,8 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 	if (!vs)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (vs->extra_data)
-		ve_free(vs->extra_data);
+	if (vs->decoder_private_free)
+		vs->decoder_private_free(vs);
 	ve_free(vs->data);
 
 	handle_destroy(surface);
