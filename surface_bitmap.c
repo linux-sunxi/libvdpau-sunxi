@@ -146,6 +146,8 @@ VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface, void cons
 		}
 	}
 
+	ve_flush_cache(out->data, out->width * out->height * 4);
+
 	return VDP_STATUS_OK;
 }
 

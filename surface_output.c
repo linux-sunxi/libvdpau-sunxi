@@ -193,6 +193,8 @@ VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface, VdpIndex
 		dst_ptr += out->width;
 	}
 
+	ve_flush_cache(out->data, out->width * out->height * 4);
+
 	return VDP_STATUS_OK;
 }
 
