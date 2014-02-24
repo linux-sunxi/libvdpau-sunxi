@@ -17,6 +17,7 @@
  *
  */
 
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include "vdpau_private.h"
@@ -40,18 +41,21 @@ VdpStatus vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *dev
 		return VDP_STATUS_ERROR;
 	}
 
-	dev->g2d_fd = open("/dev/g2d", O_RDWR);
-	if (dev->g2d_fd == -1)
+	char *env_vdpau_osd = getenv("VDPAU_OSD");
+	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
 	{
-		ve_close();
-		free(dev);
-		return VDP_STATUS_ERROR;
+		dev->g2d_fd = open("/dev/g2d", O_RDWR);
+		if (dev->g2d_fd != -1)
+			dev->osd_enabled = 1;
+		else
+			VDPAU_DBG("Failed to open /dev/g2d! OSD disabled.");
 	}
 
 	int handle = handle_create(dev);
 	if (handle == -1)
 	{
-		close(dev->g2d_fd);
+		if (dev->osd_enabled)
+			close(dev->g2d_fd);
 		ve_close();
 		free(dev);
 		return VDP_STATUS_RESOURCES;
@@ -69,7 +73,8 @@ VdpStatus vdp_device_destroy(VdpDevice device)
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	close(dev->g2d_fd);
+	if (dev->osd_enabled)
+		close(dev->g2d_fd);
 	ve_close();
 	XCloseDisplay(dev->display);
 

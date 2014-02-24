@@ -48,29 +48,32 @@ VdpStatus vdp_output_surface_create(VdpDevice device, VdpRGBAFormat rgba_format,
 	out->saturation = 1.0;
 	out->device = dev;
 
-	out->data = ve_malloc(width * height * 4);
-	if (!out->data)
+	if (out->device->osd_enabled)
 	{
-		free(out);
-		return VDP_STATUS_RESOURCES;
+		out->data = ve_malloc(width * height * 4);
+		if (!out->data)
+		{
+			free(out);
+			return VDP_STATUS_RESOURCES;
+		}
+
+		g2d_fillrect args;
+
+		args.flag = G2D_FIL_NONE;
+		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
+		args.dst_image.w = width;
+		args.dst_image.h = height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		args.dst_rect.x = 0;
+		args.dst_rect.y = 0;
+		args.dst_rect.w = width;
+		args.dst_rect.h = height;
+		args.color = 0;
+		args.alpha = 0;
+
+		ioctl(dev->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
-
-	g2d_fillrect args;
-
-	args.flag = G2D_FIL_NONE;
-	args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
-	args.dst_image.w = width;
-	args.dst_image.h = height;
-	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-	args.dst_rect.x = 0;
-	args.dst_rect.y = 0;
-	args.dst_rect.w = width;
-	args.dst_rect.h = height;
-	args.color = 0;
-	args.alpha = 0;
-
-	ioctl(dev->g2d_fd, G2D_CMD_FILLRECT, &args);
 
 	int handle = handle_create(out);
 	if (handle == -1)
@@ -150,6 +153,9 @@ VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface, VdpIndex
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	if (!out->device->osd_enabled)
+		return VDP_STATUS_OK;
+
 	int x, y, dest_width, dest_height;
 	const uint32_t *colormap = color_table;
 	const uint8_t *src_ptr = source_data[0];
@@ -216,6 +222,9 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
+
+	if (!out->device->osd_enabled)
+		return VDP_STATUS_OK;
 
 	output_surface_ctx_t *in = handle_get(source_surface);
 
@@ -287,6 +296,9 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
+
+	if (!out->device->osd_enabled)
+		return VDP_STATUS_OK;
 
 	bitmap_surface_ctx_t *in = handle_get(source_surface);
 

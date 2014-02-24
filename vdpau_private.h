@@ -38,6 +38,7 @@ typedef struct
 	void *preemption_callback_context;
 	int fd;
 	int g2d_fd;
+	int osd_enabled;
 } device_ctx_t;
 
 typedef struct video_surface_ctx_struct
