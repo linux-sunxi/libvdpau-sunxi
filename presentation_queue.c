@@ -70,10 +70,16 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device, Drawable dr
 	if (qt->layer == 0)
 		goto out_layer;
 
+	args[1] = qt->layer;
+	ioctl(qt->fd, DISP_CMD_LAYER_TOP, args);
+
 	args[1] = DISP_LAYER_WORK_MODE_NORMAL;
 	qt->layer_top = ioctl(qt->fd, DISP_CMD_LAYER_REQUEST, args);
 	if (qt->layer_top == 0)
 		goto out_layer_top;
+
+	args[1] = qt->layer_top;
+	ioctl(qt->fd, DISP_CMD_LAYER_TOP, args);
 
 	XSetWindowBackground(dev->display, drawable, 0x000102);
 
@@ -283,7 +289,6 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		uint32_t args[4] = { 0, q->target->layer, (unsigned long)(&layer_info), 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
-		ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
 		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 		// Note: might be more reliable (but slower and problematic when there
 		// are driver issues and the GET functions return wrong values) to query the
@@ -345,7 +350,6 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
 	ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
-	ioctl(q->target->fd, DISP_CMD_LAYER_TOP, args);
 	ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 
 	return VDP_STATUS_OK;
