@@ -37,6 +37,8 @@ typedef struct
 	VdpPreemptionCallback *preemption_callback;
 	void *preemption_callback_context;
 	int fd;
+	int g2d_fd;
+	int osd_enabled;
 } device_ctx_t;
 
 typedef struct video_surface_ctx_struct
@@ -67,6 +69,7 @@ typedef struct
 	Drawable drawable;
 	int fd;
 	int layer;
+	int layer_top;
 } queue_target_ctx_t;
 
 typedef struct
@@ -93,12 +96,22 @@ typedef struct
 	uint32_t width, height;
 	video_surface_ctx_t *vs;
 	VdpRect video_src_rect, video_dst_rect;
+	void *data;
 	int csc_change;
 	float brightness;
 	float contrast;
 	float saturation;
 	float hue;
 } output_surface_ctx_t;
+
+typedef struct
+{
+	device_ctx_t *device;
+	VdpRGBAFormat rgba_format;
+	uint32_t width, height;
+	VdpBool frequently_accessed;
+	void *data;
+} bitmap_surface_ctx_t;
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))

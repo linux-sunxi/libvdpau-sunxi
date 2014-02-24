@@ -18,7 +18,10 @@
  */
 
 #include <math.h>
+#include <stropts.h>
 #include "vdpau_private.h"
+#include "ve.h"
+#include "g2d_driver.h"
 
 VdpStatus vdp_video_mixer_create(VdpDevice device, uint32_t feature_count, VdpVideoMixerFeature const *features, uint32_t parameter_count, VdpVideoMixerParameter const *parameters, void const *const *parameter_values, VdpVideoMixer *mixer)
 {
@@ -101,6 +104,36 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 	os->saturation = mix->saturation;
 	os->hue = mix->hue;
 	mix->csc_change = 0;
+
+	if (mix->device->osd_enabled)
+	{
+		g2d_fillrect args;
+
+		args.flag = G2D_FIL_NONE;
+		args.dst_image.addr[0] = ve_virt2phys(os->data) + 0x40000000;
+		args.dst_image.w = os->width;
+		args.dst_image.h = os->height;
+		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+		if (destination_rect)
+		{
+			args.dst_rect.x = destination_rect->x0;
+			args.dst_rect.y = destination_rect->y0;
+			args.dst_rect.w = destination_rect->x1 - destination_rect->x0;
+			args.dst_rect.h = destination_rect->y1 - destination_rect->y0;
+		}
+		else
+		{
+			args.dst_rect.x = 0;
+			args.dst_rect.y = 0;
+			args.dst_rect.w = os->width;
+			args.dst_rect.h = os->height;
+		}
+		args.color = 0;
+		args.alpha = 0;
+
+		ioctl(mix->device->g2d_fd, G2D_CMD_FILLRECT, &args);
+	}
 
 	if (layer_count != 0)
 		VDPAU_DBG_ONCE("Requested unimplemented additional layers");

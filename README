@@ -11,10 +11,19 @@ something will fail.
    $ make install
 
    $ export VDPAU_DRIVER=sunxi
-   
+
 and then for mplayer:
    $ mplayer -vo vdpau -vc ffmpeg12vdpau,ffh264vdpau, [filename]
 or for mpv:
    $ mpv --vo=vdpau --hwdec=vdpau --hwdec-codecs=all [filename]
 
 Note: Make sure that you have write access to both /dev/disp and /dev/cedar_dev
+
+To enable OSD support for e.g. subtitles, set VDPAU_OSD environment
+variable to 1:
+   $ export VDPAU_OSD=1
+
+This partly breaks X11 integration due to hardware limitations. The video
+area can't be overlapped by other windows. For fullscreen use this is no
+problem.
+Note: this needs G2D, so make sure that you have write access to /dev/g2d.
