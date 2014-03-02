@@ -349,10 +349,10 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		layer_info.fb.seq = DISP_SEQ_ARGB;
 		switch (os->rgba_format)
 		{
-		case VDP_RGBA_FORMAT_B8G8R8A8:
+		case VDP_RGBA_FORMAT_R8G8B8A8:
 			layer_info.fb.br_swap = 1;
 			break;
-		case VDP_RGBA_FORMAT_R8G8B8A8:
+		case VDP_RGBA_FORMAT_B8G8R8A8:
 		default:
 			layer_info.fb.br_swap = 0;
 			break;
