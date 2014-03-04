@@ -569,7 +569,10 @@ static int check_scaling_lists(h264_context_t *c)
 	return 1;
 }
 
-static VdpStatus h264_decode(decoder_ctx_t *decoder, VdpPictureInfo const *_info, const int len, video_surface_ctx_t *output)
+static VdpStatus h264_decode(decoder_ctx_t *decoder,
+                             VdpPictureInfo const *_info,
+                             const int len,
+                             video_surface_ctx_t *output)
 {
 	h264_private_t *decoder_p = (h264_private_t *)decoder->private;
 	VdpPictureInfoH264 const *info = (VdpPictureInfoH264 const *)_info;

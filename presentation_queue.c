@@ -36,7 +36,9 @@ static uint64_t get_time(void)
 	return (uint64_t)tp.tv_sec * 1000000000ULL + (uint64_t)tp.tv_nsec;
 }
 
-VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device, Drawable drawable, VdpPresentationQueueTarget *target)
+VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
+                                                   Drawable drawable,
+                                                   VdpPresentationQueueTarget *target)
 {
 	if (!target || !drawable)
 		return VDP_STATUS_INVALID_POINTER;
@@ -144,7 +146,9 @@ VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget prese
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_create(VdpDevice device, VdpPresentationQueueTarget presentation_queue_target, VdpPresentationQueue *presentation_queue)
+VdpStatus vdp_presentation_queue_create(VdpDevice device,
+                                        VdpPresentationQueueTarget presentation_queue_target,
+                                        VdpPresentationQueue *presentation_queue)
 {
 	if (!presentation_queue)
 		return VDP_STATUS_INVALID_POINTER;
@@ -187,7 +191,8 @@ VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_set_background_color(VdpPresentationQueue presentation_queue, VdpColor *const background_color)
+VdpStatus vdp_presentation_queue_set_background_color(VdpPresentationQueue presentation_queue,
+                                                      VdpColor *const background_color)
 {
 	if (!background_color)
 		return VDP_STATUS_INVALID_POINTER;
@@ -204,7 +209,8 @@ VdpStatus vdp_presentation_queue_set_background_color(VdpPresentationQueue prese
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_get_background_color(VdpPresentationQueue presentation_queue, VdpColor *const background_color)
+VdpStatus vdp_presentation_queue_get_background_color(VdpPresentationQueue presentation_queue,
+                                                      VdpColor *const background_color)
 {
 	if (!background_color)
 		return VDP_STATUS_INVALID_POINTER;
@@ -221,7 +227,8 @@ VdpStatus vdp_presentation_queue_get_background_color(VdpPresentationQueue prese
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_get_time(VdpPresentationQueue presentation_queue, VdpTime *current_time)
+VdpStatus vdp_presentation_queue_get_time(VdpPresentationQueue presentation_queue,
+                                          VdpTime *current_time)
 {
 	queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
@@ -231,7 +238,11 @@ VdpStatus vdp_presentation_queue_get_time(VdpPresentationQueue presentation_queu
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue, VdpOutputSurface surface, uint32_t clip_width, uint32_t clip_height, VdpTime earliest_presentation_time)
+VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue,
+                                         VdpOutputSurface surface,
+                                         uint32_t clip_width,
+                                         uint32_t clip_height,
+                                         VdpTime earliest_presentation_time)
 {
 	queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
@@ -379,7 +390,9 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue presentation_queue, VdpOutputSurface surface, VdpTime *first_presentation_time)
+VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue presentation_queue,
+                                                          VdpOutputSurface surface,
+                                                          VdpTime *first_presentation_time)
 {
 	queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
@@ -394,7 +407,10 @@ VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue p
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_presentation_queue_query_surface_status(VdpPresentationQueue presentation_queue, VdpOutputSurface surface, VdpPresentationQueueStatus *status, VdpTime *first_presentation_time)
+VdpStatus vdp_presentation_queue_query_surface_status(VdpPresentationQueue presentation_queue,
+                                                      VdpOutputSurface surface,
+                                                      VdpPresentationQueueStatus *status,
+                                                      VdpTime *first_presentation_time)
 {
 	queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)

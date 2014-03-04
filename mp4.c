@@ -141,7 +141,10 @@ static int decode_vop_header(bitstream *bs, VdpPictureInfoMPEG4Part2 const *info
 	return 1;
 }
 
-static VdpStatus mp4_decode(decoder_ctx_t *decoder, VdpPictureInfo const *_info, const int len, video_surface_ctx_t *output)
+static VdpStatus mp4_decode(decoder_ctx_t *decoder,
+                            VdpPictureInfo const *_info,
+                            const int len,
+                            video_surface_ctx_t *output)
 {
 	VdpPictureInfoMPEG4Part2 const *info = (VdpPictureInfoMPEG4Part2 const *)_info;
 	mp4_private_t *decoder_p = (mp4_private_t *)decoder->private;

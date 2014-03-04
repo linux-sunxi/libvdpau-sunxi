@@ -22,7 +22,11 @@
 #include "ve.h"
 #include "g2d_driver.h"
 
-VdpStatus vdp_output_surface_create(VdpDevice device, VdpRGBAFormat rgba_format, uint32_t width, uint32_t height, VdpOutputSurface  *surface)
+VdpStatus vdp_output_surface_create(VdpDevice device,
+                                    VdpRGBAFormat rgba_format,
+                                    uint32_t width,
+                                    uint32_t height,
+                                    VdpOutputSurface *surface)
 {
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
@@ -102,7 +106,10 @@ VdpStatus vdp_output_surface_destroy(VdpOutputSurface surface)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_get_parameters(VdpOutputSurface surface, VdpRGBAFormat *rgba_format, uint32_t *width, uint32_t *height)
+VdpStatus vdp_output_surface_get_parameters(VdpOutputSurface surface,
+                                            VdpRGBAFormat *rgba_format,
+                                            uint32_t *width,
+                                            uint32_t *height)
 {
 	output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -120,7 +127,10 @@ VdpStatus vdp_output_surface_get_parameters(VdpOutputSurface surface, VdpRGBAFor
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_get_bits_native(VdpOutputSurface surface, VdpRect const *source_rect, void *const *destination_data, uint32_t const *destination_pitches)
+VdpStatus vdp_output_surface_get_bits_native(VdpOutputSurface surface,
+                                             VdpRect const *source_rect,
+                                             void *const *destination_data,
+                                             uint32_t const *destination_pitches)
 {
 	output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -131,7 +141,10 @@ VdpStatus vdp_output_surface_get_bits_native(VdpOutputSurface surface, VdpRect c
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface, void const *const *source_data, uint32_t const *source_pitches, VdpRect const *destination_rect)
+VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface,
+                                             void const *const *source_data,
+                                             uint32_t const *source_pitches,
+                                             VdpRect const *destination_rect)
 {
 	output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -144,7 +157,13 @@ VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface, void cons
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface, VdpIndexedFormat source_indexed_format, void const *const *source_data, uint32_t const *source_pitch, VdpRect const *destination_rect, VdpColorTableFormat color_table_format, void const *color_table)
+VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface,
+                                              VdpIndexedFormat source_indexed_format,
+                                              void const *const *source_data,
+                                              uint32_t const *source_pitch,
+                                              VdpRect const *destination_rect,
+                                              VdpColorTableFormat color_table_format,
+                                              void const *color_table)
 {
 	if (color_table_format != VDP_COLOR_TABLE_FORMAT_B8G8R8X8)
 		return VDP_STATUS_INVALID_COLOR_TABLE_FORMAT;
@@ -204,7 +223,12 @@ VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface, VdpIndex
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_put_bits_y_cb_cr(VdpOutputSurface surface, VdpYCbCrFormat source_ycbcr_format, void const *const *source_data, uint32_t const *source_pitches, VdpRect const *destination_rect, VdpCSCMatrix const *csc_matrix)
+VdpStatus vdp_output_surface_put_bits_y_cb_cr(VdpOutputSurface surface,
+                                              VdpYCbCrFormat source_ycbcr_format,
+                                              void const *const *source_data,
+                                              uint32_t const *source_pitches,
+                                              VdpRect const *destination_rect,
+                                              VdpCSCMatrix const *csc_matrix)
 {
 	output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -217,7 +241,13 @@ VdpStatus vdp_output_surface_put_bits_y_cb_cr(VdpOutputSurface surface, VdpYCbCr
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_surface, VdpRect const *destination_rect, VdpOutputSurface source_surface, VdpRect const *source_rect, VdpColor const *colors, VdpOutputSurfaceRenderBlendState const *blend_state, uint32_t flags)
+VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_surface,
+                                                   VdpRect const *destination_rect,
+                                                   VdpOutputSurface source_surface,
+                                                   VdpRect const *source_rect,
+                                                   VdpColor const *colors,
+                                                   VdpOutputSurfaceRenderBlendState const *blend_state,
+                                                   uint32_t flags)
 {
 	output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
@@ -291,7 +321,13 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_surface, VdpRect const *destination_rect, VdpBitmapSurface source_surface, VdpRect const *source_rect, VdpColor const *colors, VdpOutputSurfaceRenderBlendState const *blend_state, uint32_t flags)
+VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_surface,
+                                                   VdpRect const *destination_rect,
+                                                   VdpBitmapSurface source_surface,
+                                                   VdpRect const *source_rect,
+                                                   VdpColor const *colors,
+                                                   VdpOutputSurfaceRenderBlendState const *blend_state,
+                                                   uint32_t flags)
 {
 	output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
@@ -364,7 +400,11 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_query_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
+VdpStatus vdp_output_surface_query_capabilities(VdpDevice device,
+                                                VdpRGBAFormat surface_rgba_format,
+                                                VdpBool *is_supported,
+                                                uint32_t *max_width,
+                                                uint32_t *max_height)
 {
 	if (!is_supported || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
@@ -380,7 +420,9 @@ VdpStatus vdp_output_surface_query_capabilities(VdpDevice device, VdpRGBAFormat 
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpBool *is_supported)
+VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice device,
+                                                                    VdpRGBAFormat surface_rgba_format,
+                                                                    VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
@@ -394,7 +436,11 @@ VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice de
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpIndexedFormat bits_indexed_format, VdpColorTableFormat color_table_format, VdpBool *is_supported)
+VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice device,
+                                                                 VdpRGBAFormat surface_rgba_format,
+                                                                 VdpIndexedFormat bits_indexed_format,
+                                                                 VdpColorTableFormat color_table_format,
+                                                                 VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
@@ -408,7 +454,10 @@ VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice devic
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_output_surface_query_put_bits_y_cb_cr_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpYCbCrFormat bits_ycbcr_format, VdpBool *is_supported)
+VdpStatus vdp_output_surface_query_put_bits_y_cb_cr_capabilities(VdpDevice device,
+                                                                 VdpRGBAFormat surface_rgba_format,
+                                                                 VdpYCbCrFormat bits_ycbcr_format,
+                                                                 VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;

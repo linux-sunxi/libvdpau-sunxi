@@ -48,7 +48,10 @@ static int mpeg_find_startcode(const uint8_t *data, int len)
 	return 0;
 }
 
-static VdpStatus mpeg12_decode(decoder_ctx_t *decoder, VdpPictureInfo const *_info, const int len, video_surface_ctx_t *output)
+static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
+                               VdpPictureInfo const *_info,
+                               const int len,
+                               video_surface_ctx_t *output)
 {
 	VdpPictureInfoMPEG1Or2 const *info = (VdpPictureInfoMPEG1Or2 const *)_info;
 	int start_offset = mpeg_find_startcode(decoder->data, len);

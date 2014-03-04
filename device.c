@@ -23,7 +23,10 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
-VdpStatus vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device, VdpGetProcAddress **get_proc_address)
+VdpStatus vdp_imp_device_create_x11(Display *display,
+                                    int screen,
+                                    VdpDevice *device,
+                                    VdpGetProcAddress **get_proc_address)
 {
 	if (!display || !device || !get_proc_address)
 		return VDP_STATUS_INVALID_POINTER;
@@ -84,7 +87,9 @@ VdpStatus vdp_device_destroy(VdpDevice device)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_preemption_callback_register(VdpDevice device, VdpPreemptionCallback callback, void *context)
+VdpStatus vdp_preemption_callback_register(VdpDevice device,
+                                           VdpPreemptionCallback callback,
+                                           void *context)
 {
 	if (!callback)
 		return VDP_STATUS_INVALID_POINTER;
@@ -164,7 +169,9 @@ static void *const functions[] =
 	[VDP_FUNC_ID_PREEMPTION_CALLBACK_REGISTER]                          = &vdp_preemption_callback_register,
 };
 
-VdpStatus vdp_get_proc_address(VdpDevice device_handle, VdpFuncId function_id, void **function_pointer)
+VdpStatus vdp_get_proc_address(VdpDevice device_handle,
+                               VdpFuncId function_id,
+                               void **function_pointer)
 {
 	if (!function_pointer)
 		return VDP_STATUS_INVALID_POINTER;

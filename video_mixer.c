@@ -23,7 +23,13 @@
 #include "ve.h"
 #include "g2d_driver.h"
 
-VdpStatus vdp_video_mixer_create(VdpDevice device, uint32_t feature_count, VdpVideoMixerFeature const *features, uint32_t parameter_count, VdpVideoMixerParameter const *parameters, void const *const *parameter_values, VdpVideoMixer *mixer)
+VdpStatus vdp_video_mixer_create(VdpDevice device,
+                                 uint32_t feature_count,
+                                 VdpVideoMixerFeature const *features,
+                                 uint32_t parameter_count,
+                                 VdpVideoMixerParameter const *parameters,
+                                 void const *const *parameter_values,
+                                 VdpVideoMixer *mixer)
 {
 	device_ctx_t *dev = handle_get(device);
 	if (!dev)
@@ -63,7 +69,21 @@ VdpStatus vdp_video_mixer_destroy(VdpVideoMixer mixer)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface background_surface, VdpRect const *background_source_rect, VdpVideoMixerPictureStructure current_picture_structure, uint32_t video_surface_past_count, VdpVideoSurface const *video_surface_past, VdpVideoSurface video_surface_current, uint32_t video_surface_future_count, VdpVideoSurface const *video_surface_future, VdpRect const *video_source_rect, VdpOutputSurface destination_surface, VdpRect const *destination_rect, VdpRect const *destination_video_rect, uint32_t layer_count, VdpLayer const *layers)
+VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
+                                 VdpOutputSurface background_surface,
+                                 VdpRect const *background_source_rect,
+                                 VdpVideoMixerPictureStructure current_picture_structure,
+                                 uint32_t video_surface_past_count,
+                                 VdpVideoSurface const *video_surface_past,
+                                 VdpVideoSurface video_surface_current,
+                                 uint32_t video_surface_future_count,
+                                 VdpVideoSurface const *video_surface_future,
+                                 VdpRect const *video_source_rect,
+                                 VdpOutputSurface destination_surface,
+                                 VdpRect const *destination_rect,
+                                 VdpRect const *destination_video_rect,
+                                 uint32_t layer_count,
+                                 VdpLayer const *layers)
 {
 	mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
@@ -142,7 +162,10 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer, VdpOutputSurface backgroun
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer, uint32_t feature_count, VdpVideoMixerFeature const *features, VdpBool *feature_supports)
+VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer,
+                                              uint32_t feature_count,
+                                              VdpVideoMixerFeature const *features,
+                                              VdpBool *feature_supports)
 {
 	if (feature_count == 0)
 		return VDP_STATUS_OK;
@@ -158,7 +181,10 @@ VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer, uint32_t feat
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer, uint32_t feature_count, VdpVideoMixerFeature const *features, VdpBool const *feature_enables)
+VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer,
+                                              uint32_t feature_count,
+                                              VdpVideoMixerFeature const *features,
+                                              VdpBool const *feature_enables)
 {
 	if (feature_count == 0)
 		return VDP_STATUS_OK;
@@ -174,7 +200,10 @@ VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer, uint32_t feat
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer, uint32_t feature_count, VdpVideoMixerFeature const *features, VdpBool *feature_enables)
+VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer,
+                                              uint32_t feature_count,
+                                              VdpVideoMixerFeature const *features,
+                                              VdpBool *feature_enables)
 {
 	if (!features || !feature_enables)
 		return VDP_STATUS_INVALID_POINTER;
@@ -207,7 +236,10 @@ static void set_csc_matrix(mixer_ctx_t *mix, const VdpCSCMatrix *matrix)
 	mix->saturation = sqrtf(sin * sin + cos * cos) / (1.403 + 1.773);
 }
 
-VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer, uint32_t attribute_count, VdpVideoMixerAttribute const *attributes, void const *const *attribute_values)
+VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
+                                               uint32_t attribute_count,
+                                               VdpVideoMixerAttribute const *attributes,
+                                               void const *const *attribute_values)
 {
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
@@ -224,7 +256,10 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer, uint32_t att
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_get_parameter_values(VdpVideoMixer mixer, uint32_t parameter_count, VdpVideoMixerParameter const *parameters, void *const *parameter_values)
+VdpStatus vdp_video_mixer_get_parameter_values(VdpVideoMixer mixer,
+                                               uint32_t parameter_count,
+                                               VdpVideoMixerParameter const *parameters,
+                                               void *const *parameter_values)
 {
 	if (!parameters || !parameter_values)
 		return VDP_STATUS_INVALID_POINTER;
@@ -237,7 +272,10 @@ VdpStatus vdp_video_mixer_get_parameter_values(VdpVideoMixer mixer, uint32_t par
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer, uint32_t attribute_count, VdpVideoMixerAttribute const *attributes, void *const *attribute_values)
+VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
+                                               uint32_t attribute_count,
+                                               VdpVideoMixerAttribute const *attributes,
+                                               void *const *attribute_values)
 {
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
@@ -250,7 +288,9 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer, uint32_t att
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device, VdpVideoMixerFeature feature, VdpBool *is_supported)
+VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device,
+                                                VdpVideoMixerFeature feature,
+                                                VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
@@ -263,7 +303,9 @@ VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device, VdpVideoMixerF
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device, VdpVideoMixerParameter parameter, VdpBool *is_supported)
+VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device,
+                                                  VdpVideoMixerParameter parameter,
+                                                  VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
@@ -288,7 +330,10 @@ VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device, VdpVideoMixe
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device, VdpVideoMixerParameter parameter, void *min_value, void *max_value)
+VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device,
+                                                      VdpVideoMixerParameter parameter,
+                                                      void *min_value,
+                                                      void *max_value)
 {
 	if (!min_value || !max_value)
 		return VDP_STATUS_INVALID_POINTER;
@@ -313,7 +358,9 @@ VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device, VdpVideo
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device, VdpVideoMixerAttribute attribute, VdpBool *is_supported)
+VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device,
+                                                  VdpVideoMixerAttribute attribute,
+                                                  VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
@@ -327,7 +374,10 @@ VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device, VdpVideoMixe
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device, VdpVideoMixerAttribute attribute, void *min_value, void *max_value)
+VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device,
+                                                      VdpVideoMixerAttribute attribute,
+                                                      void *min_value,
+                                                      void *max_value)
 {
 	if (!min_value || !max_value)
 		return VDP_STATUS_INVALID_POINTER;
@@ -363,7 +413,9 @@ VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device, VdpVideo
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp, VdpColorStandard standard, VdpCSCMatrix *csc_matrix)
+VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp,
+                                  VdpColorStandard standard,
+                                  VdpCSCMatrix *csc_matrix)
 {
 	if (!csc_matrix || !procamp)
 		return VDP_STATUS_INVALID_POINTER;

@@ -23,7 +23,12 @@
 #include "ve.h"
 #include "g2d_driver.h"
 
-VdpStatus vdp_bitmap_surface_create(VdpDevice device, VdpRGBAFormat rgba_format, uint32_t width, uint32_t height, VdpBool frequently_accessed, VdpBitmapSurface *surface)
+VdpStatus vdp_bitmap_surface_create(VdpDevice device,
+                                    VdpRGBAFormat rgba_format,
+                                    uint32_t width,
+                                    uint32_t height,
+                                    VdpBool frequently_accessed,
+                                    VdpBitmapSurface *surface)
 {
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
@@ -102,7 +107,11 @@ VdpStatus vdp_bitmap_surface_destroy(VdpBitmapSurface surface)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface, VdpRGBAFormat *rgba_format, uint32_t *width, uint32_t *height, VdpBool *frequently_accessed)
+VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface,
+                                            VdpRGBAFormat *rgba_format,
+                                            uint32_t *width,
+                                            uint32_t *height,
+                                            VdpBool *frequently_accessed)
 {
 	bitmap_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -123,7 +132,10 @@ VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface, VdpRGBAFor
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface, void const *const *source_data, uint32_t const *source_pitches, VdpRect const *destination_rect)
+VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface,
+                                             void const *const *source_data,
+                                             uint32_t const *source_pitches,
+                                             VdpRect const *destination_rect)
 {
 	bitmap_surface_ctx_t *out = handle_get(surface);
 	if (!out)
@@ -157,7 +169,11 @@ VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface, void cons
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_bitmap_surface_query_capabilities(VdpDevice device, VdpRGBAFormat surface_rgba_format, VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
+VdpStatus vdp_bitmap_surface_query_capabilities(VdpDevice device,
+                                                VdpRGBAFormat surface_rgba_format,
+                                                VdpBool *is_supported,
+                                                uint32_t *max_width,
+                                                uint32_t *max_height)
 {
 	if (!is_supported || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;

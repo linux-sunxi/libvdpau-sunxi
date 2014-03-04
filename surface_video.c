@@ -21,7 +21,11 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
-VdpStatus vdp_video_surface_create(VdpDevice device, VdpChromaType chroma_type, uint32_t width, uint32_t height, VdpVideoSurface *surface)
+VdpStatus vdp_video_surface_create(VdpDevice device,
+                                   VdpChromaType chroma_type,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   VdpVideoSurface *surface)
 {
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
@@ -95,7 +99,10 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_surface_get_parameters(VdpVideoSurface surface, VdpChromaType *chroma_type, uint32_t *width, uint32_t *height)
+VdpStatus vdp_video_surface_get_parameters(VdpVideoSurface surface,
+                                           VdpChromaType *chroma_type,
+                                           uint32_t *width,
+                                           uint32_t *height)
 {
 	video_surface_ctx_t *vid = handle_get(surface);
 	if (!vid)
@@ -113,7 +120,10 @@ VdpStatus vdp_video_surface_get_parameters(VdpVideoSurface surface, VdpChromaTyp
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFormat destination_ycbcr_format, void *const *destination_data, uint32_t const *destination_pitches)
+VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
+                                             VdpYCbCrFormat destination_ycbcr_format,
+                                             void *const *destination_data,
+                                             uint32_t const *destination_pitches)
 {
 	video_surface_ctx_t *vs = handle_get(surface);
 	if (!vs)
@@ -123,7 +133,10 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFo
 	return VDP_STATUS_ERROR;
 }
 
-VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFormat source_ycbcr_format, void const *const *source_data, uint32_t const *source_pitches)
+VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
+                                             VdpYCbCrFormat source_ycbcr_format,
+                                             void const *const *source_data,
+                                             uint32_t const *source_pitches)
 {
 	int i;
 	const uint8_t *src;
@@ -202,7 +215,11 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface, VdpYCbCrFo
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_surface_query_capabilities(VdpDevice device, VdpChromaType surface_chroma_type, VdpBool *is_supported, uint32_t *max_width, uint32_t *max_height)
+VdpStatus vdp_video_surface_query_capabilities(VdpDevice device,
+                                               VdpChromaType surface_chroma_type,
+                                               VdpBool *is_supported,
+                                               uint32_t *max_width,
+                                               uint32_t *max_height)
 {
 	if (!is_supported || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
@@ -218,7 +235,10 @@ VdpStatus vdp_video_surface_query_capabilities(VdpDevice device, VdpChromaType s
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_video_surface_query_get_put_bits_y_cb_cr_capabilities(VdpDevice device, VdpChromaType surface_chroma_type, VdpYCbCrFormat bits_ycbcr_format, VdpBool *is_supported)
+VdpStatus vdp_video_surface_query_get_put_bits_y_cb_cr_capabilities(VdpDevice device,
+                                                                    VdpChromaType surface_chroma_type,
+                                                                    VdpYCbCrFormat bits_ycbcr_format,
+                                                                    VdpBool *is_supported)
 {
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;

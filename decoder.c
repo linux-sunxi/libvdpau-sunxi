@@ -21,7 +21,12 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
-VdpStatus vdp_decoder_create(VdpDevice device, VdpDecoderProfile profile, uint32_t width, uint32_t height, uint32_t max_references, VdpDecoder *decoder)
+VdpStatus vdp_decoder_create(VdpDevice device,
+                             VdpDecoderProfile profile,
+                             uint32_t width,
+                             uint32_t height,
+                             uint32_t max_references,
+                             VdpDecoder *decoder)
 {
 	device_ctx_t *dev = handle_get(device);
 	if (!dev)
@@ -106,7 +111,10 @@ VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_decoder_get_parameters(VdpDecoder decoder, VdpDecoderProfile *profile, uint32_t *width, uint32_t *height)
+VdpStatus vdp_decoder_get_parameters(VdpDecoder decoder,
+                                     VdpDecoderProfile *profile,
+                                     uint32_t *width,
+                                     uint32_t *height)
 {
 	decoder_ctx_t *dec = handle_get(decoder);
 	if (!dec)
@@ -124,7 +132,11 @@ VdpStatus vdp_decoder_get_parameters(VdpDecoder decoder, VdpDecoderProfile *prof
 	return VDP_STATUS_OK;
 }
 
-VdpStatus vdp_decoder_render(VdpDecoder decoder, VdpVideoSurface target, VdpPictureInfo const *picture_info, uint32_t bitstream_buffer_count, VdpBitstreamBuffer const *bitstream_buffers)
+VdpStatus vdp_decoder_render(VdpDecoder decoder,
+                             VdpVideoSurface target,
+                             VdpPictureInfo const *picture_info,
+                             uint32_t bitstream_buffer_count,
+                             VdpBitstreamBuffer const *bitstream_buffers)
 {
 	decoder_ctx_t *dec = handle_get(decoder);
 	if (!dec)
@@ -147,7 +159,13 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder, VdpVideoSurface target, VdpPict
 	return dec->decode(dec, picture_info, pos, vid);
 }
 
-VdpStatus vdp_decoder_query_capabilities(VdpDevice device, VdpDecoderProfile profile, VdpBool *is_supported, uint32_t *max_level, uint32_t *max_macroblocks, uint32_t *max_width, uint32_t *max_height)
+VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
+                                         VdpDecoderProfile profile,
+                                         VdpBool *is_supported,
+                                         uint32_t *max_level,
+                                         uint32_t *max_macroblocks,
+                                         uint32_t *max_width,
+                                         uint32_t *max_height)
 {
 	if (!is_supported || !max_level || !max_macroblocks || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
