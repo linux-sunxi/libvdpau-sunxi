@@ -126,7 +126,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 
 	if (mix->device->osd_enabled)
 	{
-		rgba_fill(&os->rgba, destination_rect, 0x00000000);
+		rgba_clear(&os->rgba);
 	}
 
 	if (layer_count != 0)

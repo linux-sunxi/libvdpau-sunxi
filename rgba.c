@@ -24,6 +24,14 @@
 #include "g2d_driver.h"
 #include "rgba.h"
 
+static void dirty_add_rect(VdpRect *dirty, const VdpRect *rect)
+{
+	dirty->x0 = min(dirty->x0, rect->x0);
+	dirty->y0 = min(dirty->y0, rect->y0);
+	dirty->x1 = max(dirty->x1, rect->x1);
+	dirty->y1 = max(dirty->y1, rect->y1);
+}
+
 VdpStatus rgba_create(rgba_surface_t *rgba,
                       device_ctx_t *device,
                       uint32_t width,
@@ -47,6 +55,10 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 		if (!rgba->data)
 			return VDP_STATUS_RESOURCES;
 
+		rgba->dirty.x0 = width;
+		rgba->dirty.y0 = height;
+		rgba->dirty.x1 = 0;
+		rgba->dirty.y1 = 0;
 		rgba_fill(rgba, NULL, 0x00000000);
 	}
 
@@ -87,6 +99,8 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 		}
 	}
 
+	rgba->flags |= RGBA_FLAG_DIRTY;
+	dirty_add_rect(&rgba->dirty, &d_rect);
 	ve_flush_cache(rgba->data, rgba->width * rgba->height * 4);
 
 	return VDP_STATUS_OK;
@@ -106,28 +120,21 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	if (!rgba->device->osd_enabled)
 		return VDP_STATUS_OK;
 
-	int x, y, dest_width, dest_height;
+	int x, y;
 	const uint32_t *colormap = color_table;
 	const uint8_t *src_ptr = source_data[0];
 	uint32_t *dst_ptr = rgba->data;
 
+	VdpRect d_rect = {0, 0, rgba->width, rgba->height};
 	if (destination_rect)
-	{
-		dest_width = destination_rect->x1 - destination_rect->x0;
-		dest_height = destination_rect->y1 - destination_rect->y0;
+		d_rect = *destination_rect;
 
-		dst_ptr += destination_rect->y0 * rgba->width;
-		dst_ptr += destination_rect->x0;
-	}
-	else
-	{
-		dest_width = rgba->width;
-		dest_height = rgba->height;
-	}
+	dst_ptr += d_rect.y0 * rgba->width;
+	dst_ptr += d_rect.x0;
 
-	for (y = 0; y < dest_height; y++)
+	for (y = 0; y < d_rect.y1 - d_rect.y0; y++)
 	{
-		for (x = 0; x < dest_width; x++)
+		for (x = 0; x < d_rect.x1 - d_rect.x0; x++)
 		{
 			uint8_t i, a;
 			switch (source_indexed_format)
@@ -149,6 +156,8 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 		dst_ptr += rgba->width;
 	}
 
+	rgba->flags |= RGBA_FLAG_DIRTY;
+	dirty_add_rect(&rgba->dirty, &d_rect);
 	ve_flush_cache(rgba->data, rgba->width * rgba->height * 4);
 
 	return VDP_STATUS_OK;
@@ -184,7 +193,23 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	else
 		rgba_blit(dest, &d_rect, src, &s_rect);
 
+	dest->flags |= RGBA_FLAG_DIRTY;
+	dirty_add_rect(&dest->dirty, &d_rect);
+
 	return VDP_STATUS_OK;
+}
+
+void rgba_clear(rgba_surface_t *rgba)
+{
+	if (!(rgba->flags & RGBA_FLAG_DIRTY))
+		return;
+
+	rgba_fill(rgba, &rgba->dirty, 0x00000000);
+	rgba->flags &= ~RGBA_FLAG_DIRTY;
+	rgba->dirty.x0 = rgba->width;
+	rgba->dirty.y0 = rgba->height;
+	rgba->dirty.x1 = 0;
+	rgba->dirty.y1 = 0;
 }
 
 void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)

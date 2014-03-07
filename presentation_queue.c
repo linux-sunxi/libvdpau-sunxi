@@ -348,7 +348,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
 	}
 
-	if (q->device->osd_enabled)
+	if (q->device->osd_enabled && os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
 		// TOP layer
 		__disp_layer_info_t layer_info;
@@ -372,19 +372,24 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		layer_info.fb.cs_mode = DISP_BT601;
 		layer_info.fb.size.width = os->rgba.width;
 		layer_info.fb.size.height = os->rgba.height;
-		layer_info.src_win.x = 0;
-		layer_info.src_win.y = 0;
-		layer_info.src_win.width = os->rgba.width;
-		layer_info.src_win.height = os->rgba.height;
-		layer_info.scn_win.x = x;
-		layer_info.scn_win.y = y;
-		layer_info.scn_win.width = clip_width ? clip_width : os->rgba.width;
-		layer_info.scn_win.height = clip_height ? clip_height : os->rgba.height;
+		layer_info.src_win.x = os->rgba.dirty.x0;
+		layer_info.src_win.y = os->rgba.dirty.y0;
+		layer_info.src_win.width = os->rgba.dirty.x1 - os->rgba.dirty.x0;
+		layer_info.src_win.height = os->rgba.dirty.y1 - os->rgba.dirty.y0;
+		layer_info.scn_win.x = x + os->rgba.dirty.x0;
+		layer_info.scn_win.y = y + os->rgba.dirty.y0;
+		layer_info.scn_win.width = min_nz(clip_width, os->rgba.dirty.x1) - os->rgba.dirty.x0;
+		layer_info.scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
 
 		uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
 		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+	}
+	else if (q->device->osd_enabled)
+	{
+		uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
+		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
 	}
 
 	return VDP_STATUS_OK;
