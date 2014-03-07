@@ -25,6 +25,7 @@
 #include <sys/ioctl.h>
 #include "sunxi_disp_ioctl.h"
 #include "ve.h"
+#include "rgba.h"
 
 static uint64_t get_time(void)
 {
@@ -351,6 +352,8 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	if (q->device->osd_enabled && os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
 		// TOP layer
+		rgba_flush(&os->rgba);
+
 		__disp_layer_info_t layer_info;
 		memset(&layer_info, 0, sizeof(layer_info));
 		layer_info.pipe = 1;

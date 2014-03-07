@@ -99,9 +99,8 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 		}
 	}
 
-	rgba->flags |= RGBA_FLAG_DIRTY;
+	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
-	ve_flush_cache(rgba->data, rgba->width * rgba->height * 4);
 
 	return VDP_STATUS_OK;
 }
@@ -156,9 +155,8 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 		dst_ptr += rgba->width;
 	}
 
-	rgba->flags |= RGBA_FLAG_DIRTY;
+	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
-	ve_flush_cache(rgba->data, rgba->width * rgba->height * 4);
 
 	return VDP_STATUS_OK;
 }
@@ -218,6 +216,7 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 
 	if (dest->device->osd_enabled)
 	{
+		rgba_flush(dest);
 
 		args.flag = G2D_FIL_PIXEL_ALPHA;
 		args.dst_image.addr[0] = ve_virt2phys(dest->data) + 0x40000000;
@@ -252,6 +251,9 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 
 	if (dest->device->osd_enabled)
 	{
+		rgba_flush(dest);
+		rgba_flush(src);
+
 		args.flag = G2D_BLT_PIXEL_ALPHA;
 		args.src_image.addr[0] = ve_virt2phys(src->data) + 0x40000000;
 		args.src_image.w = src->width;
@@ -273,5 +275,15 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		args.alpha = 0;
 
 		ioctl(dest->device->g2d_fd, G2D_CMD_BITBLT, &args);
+	}
+}
+
+void rgba_flush(rgba_surface_t *rgba)
+{
+	if (rgba->flags & RGBA_FLAG_NEEDS_FLUSH)
+	{
+		ve_flush_cache(rgba->data + rgba->dirty.y0 * rgba->width * 4,
+				(rgba->dirty.y1 - rgba->dirty.y0) * rgba->width * 4);
+		rgba->flags &= ~RGBA_FLAG_NEEDS_FLUSH;
 	}
 }
