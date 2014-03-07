@@ -92,11 +92,16 @@ typedef struct
 typedef struct
 {
 	device_ctx_t *device;
-	VdpRGBAFormat rgba_format;
+	VdpRGBAFormat format;
 	uint32_t width, height;
+	void *data;
+} rgba_surface_t;
+
+typedef struct
+{
+	rgba_surface_t rgba;
 	video_surface_ctx_t *vs;
 	VdpRect video_src_rect, video_dst_rect;
-	void *data;
 	int csc_change;
 	float brightness;
 	float contrast;
@@ -106,11 +111,8 @@ typedef struct
 
 typedef struct
 {
-	device_ctx_t *device;
-	VdpRGBAFormat rgba_format;
-	uint32_t width, height;
+	rgba_surface_t rgba;
 	VdpBool frequently_accessed;
-	void *data;
 } bitmap_surface_ctx_t;
 
 #ifndef ARRAY_SIZE

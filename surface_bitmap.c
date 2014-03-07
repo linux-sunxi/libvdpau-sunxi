@@ -17,11 +17,8 @@
  *
  */
 
-#include <string.h>
-#include <sys/ioctl.h>
 #include "vdpau_private.h"
-#include "ve.h"
-#include "g2d_driver.h"
+#include "rgba.h"
 
 VdpStatus vdp_bitmap_surface_create(VdpDevice device,
                                     VdpRGBAFormat rgba_format,
@@ -30,14 +27,10 @@ VdpStatus vdp_bitmap_surface_create(VdpDevice device,
                                     VdpBool frequently_accessed,
                                     VdpBitmapSurface *surface)
 {
+	int ret = VDP_STATUS_OK;
+
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
-
-	if (rgba_format != VDP_RGBA_FORMAT_B8G8R8A8 && rgba_format != VDP_RGBA_FORMAT_R8G8B8A8)
-		return VDP_STATUS_INVALID_RGBA_FORMAT;
-
-	if (width < 1 || width > 8192 || height < 1 || height > 8192)
-		return VDP_STATUS_INVALID_SIZE;
 
 	device_ctx_t *dev = handle_get(device);
 	if (!dev)
@@ -47,43 +40,19 @@ VdpStatus vdp_bitmap_surface_create(VdpDevice device,
 	if (!out)
 		return VDP_STATUS_RESOURCES;
 
-	out->width = width;
-	out->height = height;
-	out->rgba_format = rgba_format;
-	out->device = dev;
 	out->frequently_accessed = frequently_accessed;
 
-	if (out->device->osd_enabled)
+	ret = rgba_create(&out->rgba, dev, width, height, rgba_format);
+	if (ret != VDP_STATUS_OK)
 	{
-		out->data = ve_malloc(width * height * 4);
-		if (!out->data)
-		{
-			free(out);
-			return VDP_STATUS_RESOURCES;
-		}
-
-		g2d_fillrect args;
-
-		args.flag = G2D_FIL_NONE;
-		args.dst_image.addr[0] = ve_virt2phys(out->data) + 0x40000000;
-		args.dst_image.w = width;
-		args.dst_image.h = height;
-		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-		args.dst_rect.x = 0;
-		args.dst_rect.y = 0;
-		args.dst_rect.w = width;
-		args.dst_rect.h = height;
-		args.color = 0;
-		args.alpha = 0;
-
-		ioctl(dev->g2d_fd, G2D_CMD_FILLRECT, &args);
+		free(out);
+		return ret;
 	}
 
 	int handle = handle_create(out);
 	if (handle == -1)
 	{
-		ve_free(out->data);
+		rgba_destroy(&out->rgba);
 		free(out);
 		return VDP_STATUS_RESOURCES;
 	}
@@ -99,7 +68,7 @@ VdpStatus vdp_bitmap_surface_destroy(VdpBitmapSurface surface)
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	ve_free(out->data);
+	rgba_destroy(&out->rgba);
 
 	handle_destroy(surface);
 	free(out);
@@ -118,13 +87,13 @@ VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface,
 		return VDP_STATUS_INVALID_HANDLE;
 
 	if (rgba_format)
-		*rgba_format = out->rgba_format;
+		*rgba_format = out->rgba.format;
 
 	if (width)
-		*width = out->width;
+		*width = out->rgba.width;
 
 	if (height)
-		*height = out->height;
+		*height = out->rgba.height;
 
 	if (frequently_accessed)
 		*frequently_accessed = out->frequently_accessed;
@@ -141,30 +110,7 @@ VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface,
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (!out->device->osd_enabled)
-		return VDP_STATUS_OK;
-
-	VdpRect d_rect = {0, 0, out->width, out->height};
-	if (destination_rect)
-		d_rect = *destination_rect;
-
-	if (0 == d_rect.x0 && out->width == d_rect.x1 && source_pitches[0] == d_rect.x1) {
-		// full width
-		const int bytes_to_copy =
-			(d_rect.x1 - d_rect.x0) * (d_rect.y1 - d_rect.y0) * 4;
-		memcpy(out->data + d_rect.y0 * out->width * 4,
-			   source_data[0], bytes_to_copy);
-	} else {
-		const unsigned int bytes_in_line = (d_rect.x1-d_rect.x0) * 4;
-		unsigned int y;
-		for (y = d_rect.y0; y < d_rect.y1; y ++) {
-			memcpy(out->data + (y * out->width + d_rect.x0) * 4,
-				   source_data[0] + (y - d_rect.y0) * source_pitches[0],
-				   bytes_in_line);
-		}
-	}
-
-	ve_flush_cache(out->data, out->width * out->height * 4);
+	rgba_put_bits_native(&out->rgba, source_data, source_pitches, destination_rect);
 
 	return VDP_STATUS_OK;
 }

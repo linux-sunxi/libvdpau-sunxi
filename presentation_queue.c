@@ -358,7 +358,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
 		layer_info.fb.format = DISP_FORMAT_ARGB8888;
 		layer_info.fb.seq = DISP_SEQ_ARGB;
-		switch (os->rgba_format)
+		switch (os->rgba.format)
 		{
 		case VDP_RGBA_FORMAT_R8G8B8A8:
 			layer_info.fb.br_swap = 1;
@@ -368,18 +368,18 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 			layer_info.fb.br_swap = 0;
 			break;
 		}
-		layer_info.fb.addr[0] = ve_virt2phys(os->data) + 0x40000000;
+		layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
 		layer_info.fb.cs_mode = DISP_BT601;
-		layer_info.fb.size.width = os->width;
-		layer_info.fb.size.height = os->height;
+		layer_info.fb.size.width = os->rgba.width;
+		layer_info.fb.size.height = os->rgba.height;
 		layer_info.src_win.x = 0;
 		layer_info.src_win.y = 0;
-		layer_info.src_win.width = os->width;
-		layer_info.src_win.height = os->height;
+		layer_info.src_win.width = os->rgba.width;
+		layer_info.src_win.height = os->rgba.height;
 		layer_info.scn_win.x = x;
 		layer_info.scn_win.y = y;
-		layer_info.scn_win.width = clip_width ? clip_width : os->width;
-		layer_info.scn_win.height = clip_height ? clip_height : os->height;
+		layer_info.scn_win.width = clip_width ? clip_width : os->rgba.width;
+		layer_info.scn_win.height = clip_height ? clip_height : os->rgba.height;
 
 		uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
