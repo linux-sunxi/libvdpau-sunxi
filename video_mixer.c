@@ -18,7 +18,7 @@
  */
 
 #include <math.h>
-#include <stropts.h>
+#include <sys/ioctl.h>
 #include "vdpau_private.h"
 #include "ve.h"
 #include "g2d_driver.h"
