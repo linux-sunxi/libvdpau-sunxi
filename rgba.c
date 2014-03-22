@@ -186,6 +186,11 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	if (destination_rect)
 		d_rect = *destination_rect;
 
+	// ignore zero-sized surfaces (also workaround for g2d driver bug)
+	if (s_rect.x0 == s_rect.x1 || s_rect.y0 == s_rect.y1 ||
+	    d_rect.x0 == d_rect.x1 || d_rect.y0 == d_rect.y1)
+		return VDP_STATUS_OK;
+
 	if (!src)
 		rgba_fill(dest, &d_rect, 0xffffffff);
 	else
