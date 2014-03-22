@@ -124,10 +124,8 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	os->hue = mix->hue;
 	mix->csc_change = 0;
 
-	if (mix->device->osd_enabled)
-	{
-		rgba_clear(&os->rgba);
-	}
+	if (mix->device->osd_enabled && (os->rgba.flags & RGBA_FLAG_DIRTY))
+		os->rgba.flags |= RGBA_FLAG_NEEDS_CLEAR;
 
 	if (layer_count != 0)
 		VDPAU_DBG_ONCE("Requested unimplemented additional layers");

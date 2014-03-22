@@ -349,7 +349,13 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
 	}
 
-	if (q->device->osd_enabled && os->rgba.flags & RGBA_FLAG_DIRTY)
+	if (!q->device->osd_enabled)
+		return VDP_STATUS_OK;
+
+	if (os->rgba.flags & RGBA_FLAG_NEEDS_CLEAR)
+		rgba_clear(&os->rgba);
+
+	if (os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
 		// TOP layer
 		rgba_flush(&os->rgba);
@@ -389,7 +395,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 
 		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 	}
-	else if (q->device->osd_enabled)
+	else
 	{
 		uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);

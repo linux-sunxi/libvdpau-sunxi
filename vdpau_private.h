@@ -91,6 +91,7 @@ typedef struct
 
 #define RGBA_FLAG_DIRTY (1 << 0)
 #define RGBA_FLAG_NEEDS_FLUSH (1 << 1)
+#define RGBA_FLAG_NEEDS_CLEAR (1 << 2)
 
 typedef struct
 {

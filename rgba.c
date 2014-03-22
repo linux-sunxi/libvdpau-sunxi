@@ -32,6 +32,12 @@ static void dirty_add_rect(VdpRect *dirty, const VdpRect *rect)
 	dirty->y1 = max(dirty->y1, rect->y1);
 }
 
+static int dirty_in_rect(const VdpRect *dirty, const VdpRect *rect)
+{
+	return (dirty->x0 >= rect->x0) && (dirty->y0 >= rect->y0) &&
+	       (dirty->x1 <= rect->x1) && (dirty->y1 <= rect->y1);
+}
+
 VdpStatus rgba_create(rgba_surface_t *rgba,
                       device_ctx_t *device,
                       uint32_t width,
@@ -83,6 +89,9 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 	if (destination_rect)
 		d_rect = *destination_rect;
 
+	if ((rgba->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&rgba->dirty, &d_rect))
+		rgba_clear(rgba);
+
 	if (0 == d_rect.x0 && rgba->width == d_rect.x1 && source_pitches[0] == d_rect.x1) {
 		// full width
 		const int bytes_to_copy =
@@ -99,6 +108,7 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 		}
 	}
 
+	rgba->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
 
@@ -128,6 +138,9 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	if (destination_rect)
 		d_rect = *destination_rect;
 
+	if ((rgba->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&rgba->dirty, &d_rect))
+		rgba_clear(rgba);
+
 	dst_ptr += d_rect.y0 * rgba->width;
 	dst_ptr += d_rect.x0;
 
@@ -155,6 +168,7 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 		dst_ptr += rgba->width;
 	}
 
+	rgba->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
 
@@ -191,11 +205,15 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	    d_rect.x0 == d_rect.x1 || d_rect.y0 == d_rect.y1)
 		return VDP_STATUS_OK;
 
+	if ((dest->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&dest->dirty, &d_rect))
+		rgba_clear(dest);
+
 	if (!src)
 		rgba_fill(dest, &d_rect, 0xffffffff);
 	else
 		rgba_blit(dest, &d_rect, src, &s_rect);
 
+	dest->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	dest->flags |= RGBA_FLAG_DIRTY;
 	dirty_add_rect(&dest->dirty, &d_rect);
 
@@ -208,7 +226,7 @@ void rgba_clear(rgba_surface_t *rgba)
 		return;
 
 	rgba_fill(rgba, &rgba->dirty, 0x00000000);
-	rgba->flags &= ~RGBA_FLAG_DIRTY;
+	rgba->flags &= ~(RGBA_FLAG_DIRTY || RGBA_FLAG_NEEDS_CLEAR);
 	rgba->dirty.x0 = rgba->width;
 	rgba->dirty.y0 = rgba->height;
 	rgba->dirty.x1 = 0;
@@ -259,7 +277,7 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		rgba_flush(dest);
 		rgba_flush(src);
 
-		args.flag = G2D_BLT_PIXEL_ALPHA;
+		args.flag = (dest->flags & RGBA_FLAG_NEEDS_CLEAR) ? G2D_BLT_NONE : G2D_BLT_PIXEL_ALPHA;
 		args.src_image.addr[0] = ve_virt2phys(src->data) + 0x40000000;
 		args.src_image.w = src->width;
 		args.src_image.h = src->height;
