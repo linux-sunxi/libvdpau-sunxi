@@ -489,6 +489,19 @@ static void fill_frame_lists(h264_context_t *c)
 			video_surface_ctx_t *surface = handle_get(rf->surface);
 			h264_video_private_t *surface_p = (h264_video_private_t *)surface->decoder_private;
 
+			if (!surface_p)
+			{
+				VDPAU_DBG("non-existent reference frame, fake it");
+				surface_p = calloc(1, sizeof(h264_video_private_t));
+
+				surface_p->extra_data_len = (c->picture_width_in_mbs_minus1 + 1) * (c->picture_height_in_mbs_minus1 + 1) * 32;
+				surface_p->extra_data = ve_malloc(surface_p->extra_data_len);
+				surface_p->pos = 0;
+
+				surface->decoder_private = surface_p;
+				surface->decoder_private_free = h264_video_private_free;
+			}
+
 			c->ref_frames[c->ref_count].surface = surface;
 			c->ref_frames[c->ref_count].top_pic_order_cnt = rf->field_order_cnt[0];
 			c->ref_frames[c->ref_count].bottom_pic_order_cnt = rf->field_order_cnt[1];
