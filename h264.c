@@ -66,9 +66,8 @@ static int32_t get_se(void *regs)
 	return readl(regs + VE_H264_BASIC_BITS);
 }
 
-#define REF_FLAG_LONGTERM	0x1
-#define REF_FLAG_TOP_REF	0x2
-#define REF_FLAG_BOTTOM_REF	0x3
+#define REF_FLAG_TOP_REF	0x1
+#define REF_FLAG_BOTTOM_REF	0x2
 
 typedef struct
 {
@@ -363,6 +362,68 @@ static void dec_ref_pic_marking(h264_context_t *c)
 	}
 }
 
+static int sort_ref_frames_by_poc(const void *p1, const void *p2)
+{
+	const h264_reference_frame_t *r1 = p1;
+	const h264_reference_frame_t *r2 = p2;
+
+	return r1->top_pic_order_cnt - r2->top_pic_order_cnt;
+}
+
+static int sort_ref_frames_by_frame_num(const void *p1, const void *p2)
+{
+	const h264_reference_frame_t *r1 = p1;
+	const h264_reference_frame_t *r2 = p2;
+
+	return r1->frame_idx - r2->frame_idx;
+}
+
+static void fill_default_ref_pic_list(h264_context_t *c)
+{
+	h264_header_t *h = &c->header;
+	VdpPictureInfoH264 const *info = c->info;
+
+	if (h->slice_type == SLICE_TYPE_P)
+	{
+		qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames_by_frame_num);
+
+		int i;
+		int ptr0 = 0;
+		for (i = 0; i < c->ref_count; i++)
+		{
+			if (c->ref_frames[c->ref_count - 1 - i].frame_idx <= info->frame_num)
+				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1 - i];
+		}
+		for (i = 0; i < c->ref_count; i++)
+		{
+			if (c->ref_frames[c->ref_count - 1 - i].frame_idx > info->frame_num)
+				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1 - i];
+		}
+	}
+	else if (h->slice_type == SLICE_TYPE_B)
+	{
+		qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames_by_poc);
+		int i;
+		int ptr0 = 0, ptr1 = 0;
+		for (i = 0; i < c->ref_count; i++)
+		{
+			if (c->ref_frames[c->ref_count - 1 - i].top_pic_order_cnt <= (uint16_t)info->field_order_cnt[0])
+				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1  - i];
+
+			if (c->ref_frames[i].top_pic_order_cnt > (uint16_t)info->field_order_cnt[0])
+				h->RefPicList1[ptr1++] = &c->ref_frames[i];
+		}
+		for (i = 0; i < c->ref_count; i++)
+		{
+			if (c->ref_frames[i].top_pic_order_cnt > (uint16_t)info->field_order_cnt[0])
+				h->RefPicList0[ptr0++] = &c->ref_frames[i];
+
+			if (c->ref_frames[c->ref_count - 1 - i].top_pic_order_cnt <= (uint16_t)info->field_order_cnt[0])
+				h->RefPicList1[ptr1++] = &c->ref_frames[c->ref_count - 1 - i];
+		}
+	}
+}
+
 static void decode_slice_header(h264_context_t *c)
 {
 	h264_header_t *h = &c->header;
@@ -423,6 +484,8 @@ static void decode_slice_header(h264_context_t *c)
 		}
 	}
 
+	fill_default_ref_pic_list(c);
+
 	if (h->nal_unit_type == 20)
 		{}//ref_pic_list_mvc_modification(); // specified in Annex H
 	else
@@ -461,13 +524,6 @@ static void decode_slice_header(h264_context_t *c)
 		slice_group_change_cycle u(v)*/
 }
 
-static int sort_ref_frames(const void *p1, const void *p2)
-{
-	const h264_reference_frame_t *r1 = p1;
-	const h264_reference_frame_t *r2 = p2;
-
-	return r1->top_pic_order_cnt - r2->top_pic_order_cnt;
-}
 
 static void fill_frame_lists(h264_context_t *c)
 {
@@ -506,9 +562,9 @@ static void fill_frame_lists(h264_context_t *c)
 			c->ref_frames[c->ref_count].top_pic_order_cnt = rf->field_order_cnt[0];
 			c->ref_frames[c->ref_count].bottom_pic_order_cnt = rf->field_order_cnt[1];
 			c->ref_frames[c->ref_count].frame_idx = rf->frame_idx;
-			c->ref_frames[c->ref_count].flags = (rf->is_long_term ? REF_FLAG_LONGTERM : 0)
-				| (rf->top_is_reference ? REF_FLAG_TOP_REF : 0)
-				| (rf->bottom_is_reference ? REF_FLAG_BOTTOM_REF : 0);
+			c->ref_frames[c->ref_count].flags =
+				(rf->top_is_reference ? REF_FLAG_TOP_REF : 0) |
+				(rf->bottom_is_reference ? REF_FLAG_BOTTOM_REF : 0);
 
 			frame_list[surface_p->pos] = &c->ref_frames[c->ref_count];
 			c->ref_count++;
@@ -559,9 +615,6 @@ static void fill_frame_lists(h264_context_t *c)
 
 	// output index
 	writel(output_p->pos, c->regs + VE_H264_OUTPUT_FRAME_IDX);
-
-	// sort reference frame list
-	qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames);
 }
 
 // VDPAU does not tell us if the scaling lists are default or custom
@@ -684,17 +737,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		// ?? some sort of reset maybe
 		writel(0x7, c->regs + VE_H264_TRIGGER);
 
-		// fill RefPicLists
 		int i;
-		int ptr0 = 0, ptr1 = 0;
-		for (i = 0; i < c->ref_count; i++)
-		{
-			if (c->ref_frames[c->ref_count - 1 - i].top_pic_order_cnt < (uint16_t)info->field_order_cnt[0])
-				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1  - i];
-
-			if (c->ref_frames[i].top_pic_order_cnt >= (uint16_t)info->field_order_cnt[0])
-				h->RefPicList1[ptr1++] = &c->ref_frames[i];
-		}
 
 		decode_slice_header(c);
 
