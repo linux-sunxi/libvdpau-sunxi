@@ -582,8 +582,8 @@ static void fill_frame_lists(h264_context_t *c)
 			writel((uint16_t)c->info->field_order_cnt[0], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((uint16_t)c->info->field_order_cnt[1], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((c->info->is_reference) ? 0x22 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(c->output->data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(c->output->data) + c->output->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(c->output->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(c->output->yuv->data) + c->output->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(output_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(output_p->extra_data) + (output_p->extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
@@ -605,8 +605,8 @@ static void fill_frame_lists(h264_context_t *c)
 			writel(frame_list[i]->top_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(frame_list[i]->bottom_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(surface->data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(surface->data) + surface->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(surface->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(surface->yuv->data) + surface->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface_p->extra_data) + (surface_p->extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
@@ -642,6 +642,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 {
 	h264_private_t *decoder_p = (h264_private_t *)decoder->private;
 	VdpPictureInfoH264 const *info = (VdpPictureInfoH264 const *)_info;
+
+	VdpStatus ret = yuv_prepare(output);
+	if (ret != VDP_STATUS_OK)
+		return ret;
 
 	h264_context_t *c = calloc(1, sizeof(h264_context_t));
 	c->regs = ve_get_regs();

@@ -70,6 +70,9 @@ VdpStatus vdp_output_surface_destroy(VdpOutputSurface surface)
 
 	rgba_destroy(&out->rgba);
 
+	if (out->yuv)
+		yuv_unref(out->yuv);
+
 	handle_destroy(surface);
 	free(out);
 

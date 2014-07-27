@@ -293,9 +293,9 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 			break;
 		}
 		layer_info.fb.br_swap = 0;
-		layer_info.fb.addr[0] = ve_virt2phys(os->vs->data) + 0x40000000;
-		layer_info.fb.addr[1] = ve_virt2phys(os->vs->data + os->vs->plane_size) + 0x40000000;
-		layer_info.fb.addr[2] = ve_virt2phys(os->vs->data + os->vs->plane_size + os->vs->plane_size / 4) + 0x40000000;
+		layer_info.fb.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
+		layer_info.fb.addr[1] = ve_virt2phys(os->yuv->data + os->vs->plane_size) + 0x40000000;
+		layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->plane_size + os->vs->plane_size / 4) + 0x40000000;
 
 		layer_info.fb.cs_mode = DISP_BT601;
 		layer_info.fb.size.width = os->vs->width;

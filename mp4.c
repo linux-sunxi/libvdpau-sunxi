@@ -155,6 +155,10 @@ static VdpStatus mp4_decode(decoder_ctx_t *decoder,
 		return VDP_STATUS_ERROR;
 	}
 
+	VdpStatus ret = yuv_prepare(output);
+	if (ret != VDP_STATUS_OK)
+		return ret;
+
 	void *ve_regs = ve_get_regs();
 	bitstream bs = { .data = decoder->data, .length = len, .bitpos = 0 };
 
@@ -176,10 +180,10 @@ static VdpStatus mp4_decode(decoder_ctx_t *decoder,
 		writel(ve_virt2phys(decoder_p->ncf_buffer), ve_regs + VE_MPEG_NCF_ADDR);
 
 		// set output buffers
-		writel(ve_virt2phys(output->data), ve_regs + VE_MPEG_REC_LUMA);
-		writel(ve_virt2phys(output->data + output->plane_size), ve_regs + VE_MPEG_REC_CHROMA);
-		writel(ve_virt2phys(output->data), ve_regs + VE_MPEG_ROT_LUMA);
-		writel(ve_virt2phys(output->data + output->plane_size), ve_regs + VE_MPEG_ROT_CHROMA);
+		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_REC_LUMA);
+		writel(ve_virt2phys(output->yuv->data + output->plane_size), ve_regs + VE_MPEG_REC_CHROMA);
+		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
+		writel(ve_virt2phys(output->yuv->data + output->plane_size), ve_regs + VE_MPEG_ROT_CHROMA);
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
@@ -217,14 +221,14 @@ static VdpStatus mp4_decode(decoder_ctx_t *decoder,
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *forward = handle_get(info->forward_reference);
-			writel(ve_virt2phys(forward->data), ve_regs + VE_MPEG_FWD_LUMA);
-			writel(ve_virt2phys(forward->data + forward->plane_size), ve_regs + VE_MPEG_FWD_CHROMA);
+			writel(ve_virt2phys(forward->yuv->data), ve_regs + VE_MPEG_FWD_LUMA);
+			writel(ve_virt2phys(forward->yuv->data + forward->plane_size), ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *backward = handle_get(info->backward_reference);
-			writel(ve_virt2phys(backward->data), ve_regs + VE_MPEG_BACK_LUMA);
-			writel(ve_virt2phys(backward->data + backward->plane_size), ve_regs + VE_MPEG_BACK_CHROMA);
+			writel(ve_virt2phys(backward->yuv->data), ve_regs + VE_MPEG_BACK_LUMA);
+			writel(ve_virt2phys(backward->yuv->data + backward->plane_size), ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
 		// set trb/trd

@@ -101,9 +101,14 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	if (os->yuv)
+		yuv_unref(os->yuv);
+
 	os->vs = handle_get(video_surface_current);
 	if (!(os->vs))
 		return VDP_STATUS_INVALID_HANDLE;
+
+	os->yuv = yuv_ref(os->vs->yuv);
 
 	if (destination_video_rect)
 	{

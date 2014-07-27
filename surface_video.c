@@ -21,6 +21,68 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
+void yuv_unref(yuv_data_t *yuv)
+{
+	yuv->ref_count--;
+
+	if (yuv->ref_count == 0)
+	{
+		ve_free(yuv->data);
+		free(yuv);
+	}
+}
+
+yuv_data_t *yuv_ref(yuv_data_t *yuv)
+{
+	yuv->ref_count++;
+	return yuv;
+}
+
+static VdpStatus yuv_new(video_surface_ctx_t *video_surface)
+{
+	video_surface->yuv = calloc(1, sizeof(yuv_data_t));
+	if (!video_surface->yuv)
+		return VDP_STATUS_RESOURCES;
+
+	video_surface->yuv->ref_count = 1;
+
+	switch (video_surface->chroma_type)
+	{
+	case VDP_CHROMA_TYPE_444:
+		video_surface->yuv->data = ve_malloc(video_surface->plane_size * 3);
+		break;
+	case VDP_CHROMA_TYPE_422:
+		video_surface->yuv->data = ve_malloc(video_surface->plane_size * 2);
+		break;
+	case VDP_CHROMA_TYPE_420:
+		video_surface->yuv->data = ve_malloc(video_surface->plane_size +
+						(video_surface->plane_size / 2));
+		break;
+	default:
+		free(video_surface->yuv);
+		return VDP_STATUS_INVALID_CHROMA_TYPE;
+	}
+
+	if (!(video_surface->yuv->data))
+	{
+		free(video_surface->yuv);
+		return VDP_STATUS_RESOURCES;
+	}
+
+	return VDP_STATUS_OK;
+}
+
+VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
+{
+	if (video_surface->yuv->ref_count > 1)
+	{
+		video_surface->yuv->ref_count--;
+		return yuv_new(video_surface);
+	}
+
+	return VDP_STATUS_OK;
+}
+
 VdpStatus vdp_video_surface_create(VdpDevice device,
                                    VdpChromaType chroma_type,
                                    uint32_t width,
@@ -48,32 +110,18 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 
 	vs->plane_size = ((width + 63) & ~63) * ((height + 63) & ~63);
 
-	switch (chroma_type)
-	{
-	case VDP_CHROMA_TYPE_444:
-		vs->data = ve_malloc(vs->plane_size * 3);
-		break;
-	case VDP_CHROMA_TYPE_422:
-		vs->data = ve_malloc(vs->plane_size * 2);
-		break;
-	case VDP_CHROMA_TYPE_420:
-		vs->data = ve_malloc(vs->plane_size + (vs->plane_size / 2));
-		break;
-	default:
-		free(vs);
-		return VDP_STATUS_INVALID_CHROMA_TYPE;
-	}
-
-	if (!(vs->data))
+	VdpStatus ret = yuv_new(vs);
+	if (ret != VDP_STATUS_OK)
 	{
 		free(vs);
-		return VDP_STATUS_RESOURCES;
+		return ret;
 	}
 
 	int handle = handle_create(vs);
 	if (handle == -1)
 	{
-		ve_free(vs->data);
+		ve_free(vs->yuv->data);
+		free(vs->yuv);
 		free(vs);
 		return VDP_STATUS_RESOURCES;
 	}
@@ -91,7 +139,8 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 
 	if (vs->decoder_private_free)
 		vs->decoder_private_free(vs);
-	ve_free(vs->data);
+
+	yuv_unref(vs->yuv);
 
 	handle_destroy(surface);
 	free(vs);
@@ -145,6 +194,10 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 	if (!vs)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	VdpStatus ret = yuv_prepare(vs);
+	if (ret != VDP_STATUS_OK)
+		return ret;
+
 	vs->source_format = source_ycbcr_format;
 
 	switch (source_ycbcr_format)
@@ -154,7 +207,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_422)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->data;
+		dst = vs->yuv->data;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, 2*vs->width);
 			src += source_pitches[0];
@@ -170,14 +223,14 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->data;
+		dst = vs->yuv->data;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[1];
-		dst = vs->data + vs->plane_size;
+		dst = vs->yuv->data + vs->plane_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[1];
@@ -189,21 +242,21 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->data;
+		dst = vs->yuv->data;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[2];
-		dst = vs->data + vs->plane_size;
+		dst = vs->yuv->data + vs->plane_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[1];
 			dst += vs->width / 2;
 		}
 		src = source_data[1];
-		dst = vs->data + vs->plane_size + vs->plane_size / 4;
+		dst = vs->yuv->data + vs->plane_size + vs->plane_size / 4;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[2];

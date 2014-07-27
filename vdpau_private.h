@@ -41,13 +41,19 @@ typedef struct
 	int osd_enabled;
 } device_ctx_t;
 
+typedef struct
+{
+	int ref_count;
+	void *data;
+} yuv_data_t;
+
 typedef struct video_surface_ctx_struct
 {
 	device_ctx_t *device;
 	uint32_t width, height;
 	VdpChromaType chroma_type;
 	VdpYCbCrFormat source_format;
-	void *data;
+	yuv_data_t *yuv;
 	int plane_size;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
@@ -107,6 +113,7 @@ typedef struct
 {
 	rgba_surface_t rgba;
 	video_surface_ctx_t *vs;
+	yuv_data_t *yuv;
 	VdpRect video_src_rect, video_dst_rect;
 	int csc_change;
 	float brightness;
@@ -152,6 +159,10 @@ typedef struct
 VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
 VdpStatus new_decoder_mp4(decoder_ctx_t *decoder);
+
+void yuv_unref(yuv_data_t *yuv);
+yuv_data_t *yuv_ref(yuv_data_t *yuv);
+VdpStatus yuv_prepare(video_surface_ctx_t *video_surface);
 
 int handle_create(void *data);
 void *handle_get(int handle);
