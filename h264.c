@@ -66,17 +66,18 @@ static int32_t get_se(void *regs)
 	return readl(regs + VE_H264_BASIC_BITS);
 }
 
-#define REF_FLAG_TOP_REF	0x1
-#define REF_FLAG_BOTTOM_REF	0x2
+#define PIC_TOP_FIELD		0x1
+#define PIC_BOTTOM_FIELD	0x2
+#define PIC_FRAME		0x3
 
 typedef struct
 {
 	video_surface_ctx_t *surface;
-	uint8_t flags;
 	uint16_t top_pic_order_cnt;
 	uint16_t bottom_pic_order_cnt;
 	uint16_t frame_idx;
-} h264_reference_frame_t;
+	uint8_t field;
+} h264_picture_t;
 
 
 #define SLICE_TYPE_P	0
@@ -122,8 +123,8 @@ typedef struct
 	int8_t chroma_weight_l1[32][2];
 	int8_t chroma_offset_l1[32][2];
 
-	h264_reference_frame_t *RefPicList0[32];
-	h264_reference_frame_t *RefPicList1[32];
+	h264_picture_t RefPicList0[32];
+	h264_picture_t RefPicList1[32];
 } h264_header_t;
 
 typedef struct
@@ -135,9 +136,10 @@ typedef struct
 	uint8_t picture_width_in_mbs_minus1;
 	uint8_t picture_height_in_mbs_minus1;
 	uint8_t default_scaling_lists;
+	int video_extra_data_len;
 
 	int ref_count;
-	h264_reference_frame_t ref_frames[16];
+	h264_picture_t ref_pic[16];
 } h264_context_t;
 
 typedef struct
@@ -155,7 +157,6 @@ static void h264_private_free(decoder_ctx_t *decoder)
 typedef struct
 {
 	void *extra_data;
-	int extra_data_len;
 	int pos;
 } h264_video_private_t;
 
@@ -181,6 +182,9 @@ static void ref_pic_list_modification(h264_context_t *c)
 			unsigned int modification_of_pic_nums_idc;
 			int refIdxL0 = 0;
 			unsigned int picNumL0 = info->frame_num;
+			if (h->field_pic_flag)
+				picNumL0 = picNumL0 * 2 + 1;
+
 			do
 			{
 				modification_of_pic_nums_idc = get_ue(c->regs);
@@ -195,19 +199,33 @@ static void ref_pic_list_modification(h264_context_t *c)
 
 					picNumL0 &= (MaxPicNum - 1);
 
+					int frame_num = picNumL0;
+					int field = PIC_FRAME;
+
+					if (h->field_pic_flag)
+					{
+						field = h->bottom_field_flag ? PIC_BOTTOM_FIELD : PIC_TOP_FIELD;
+						if (!(frame_num & 1))
+							field ^= PIC_FRAME;
+
+						frame_num /= 2;
+					}
+
 					int i, j;
 					for (i = 0; i < c->ref_count; i++)
 					{
-						if (c->ref_frames[i].frame_idx == picNumL0)
+						if (c->ref_pic[i].frame_idx == frame_num)
 							break;
 					}
 
 					for (j = h->num_ref_idx_l0_active_minus1 + 1; j > refIdxL0; j--)
 						h->RefPicList0[j] = h->RefPicList0[j - 1];
-					h->RefPicList0[refIdxL0++] = &c->ref_frames[i];
-					i = refIdxL0;
+					h->RefPicList0[refIdxL0] = c->ref_pic[i];
+					if (h->field_pic_flag)
+						h->RefPicList0[refIdxL0].field = field;
+					i = ++refIdxL0;
 					for (j = refIdxL0; j <= h->num_ref_idx_l0_active_minus1 + 1; j++)
-						if (h->RefPicList0[j] && h->RefPicList0[j]->frame_idx != picNumL0)
+						if (h->RefPicList0[j].frame_idx != frame_num || h->RefPicList0[j].field != field)
 							h->RefPicList0[i++] = h->RefPicList0[j];
 				}
 				else if (modification_of_pic_nums_idc == 2)
@@ -362,65 +380,117 @@ static void dec_ref_pic_marking(h264_context_t *c)
 	}
 }
 
-static int sort_ref_frames_by_poc(const void *p1, const void *p2)
+static int pic_order_cnt(const h264_picture_t *pic)
 {
-	const h264_reference_frame_t *r1 = p1;
-	const h264_reference_frame_t *r2 = p2;
-
-	return r1->top_pic_order_cnt - r2->top_pic_order_cnt;
+	if (pic->field == PIC_FRAME)
+		return min(pic->top_pic_order_cnt, pic->bottom_pic_order_cnt);
+	else if (pic->field == PIC_TOP_FIELD)
+		return pic->top_pic_order_cnt;
+	else
+		return pic->bottom_pic_order_cnt;
 }
 
-static int sort_ref_frames_by_frame_num(const void *p1, const void *p2)
+static int sort_ref_pics_by_poc(const void *p1, const void *p2)
 {
-	const h264_reference_frame_t *r1 = p1;
-	const h264_reference_frame_t *r2 = p2;
+	const h264_picture_t *r1 = p1;
+	const h264_picture_t *r2 = p2;
+
+	return pic_order_cnt(r1) - pic_order_cnt(r2);
+}
+
+static int sort_ref_pics_by_frame_num(const void *p1, const void *p2)
+{
+	const h264_picture_t *r1 = p1;
+	const h264_picture_t *r2 = p2;
 
 	return r1->frame_idx - r2->frame_idx;
+}
+
+static void split_ref_fields(h264_picture_t *out, h264_picture_t **in, int len, int cur_field)
+{
+	int even = 0, odd = 0;
+	int index = 0;
+
+	while (even < len || odd < len)
+	{
+		while (even < len && !(in[even]->field & cur_field))
+			even++;
+		if (even < len)
+		{
+			out[index] = *in[even++];
+			out[index].field = cur_field;
+			index++;
+		}
+
+		while (odd < len && !(in[odd]->field & (cur_field ^ PIC_FRAME)))
+			odd++;
+		if (odd < len)
+		{
+			out[index] = *in[odd++];
+			out[index].field = cur_field ^ PIC_FRAME;
+			index++;
+		}
+	}
 }
 
 static void fill_default_ref_pic_list(h264_context_t *c)
 {
 	h264_header_t *h = &c->header;
 	VdpPictureInfoH264 const *info = c->info;
+	int cur_field = h->field_pic_flag ? (h->bottom_field_flag ? PIC_BOTTOM_FIELD : PIC_TOP_FIELD) : PIC_FRAME;
 
 	if (h->slice_type == SLICE_TYPE_P)
 	{
-		qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames_by_frame_num);
+		qsort(c->ref_pic, c->ref_count, sizeof(c->ref_pic[0]), &sort_ref_pics_by_frame_num);
 
 		int i;
 		int ptr0 = 0;
+		h264_picture_t *sorted[16];
 		for (i = 0; i < c->ref_count; i++)
 		{
-			if (c->ref_frames[c->ref_count - 1 - i].frame_idx <= info->frame_num)
-				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1 - i];
+			if (c->ref_pic[c->ref_count - 1 - i].frame_idx <= info->frame_num)
+				sorted[ptr0++] = &c->ref_pic[c->ref_count - 1 - i];
 		}
 		for (i = 0; i < c->ref_count; i++)
 		{
-			if (c->ref_frames[c->ref_count - 1 - i].frame_idx > info->frame_num)
-				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1 - i];
+			if (c->ref_pic[c->ref_count - 1 - i].frame_idx > info->frame_num)
+				sorted[ptr0++] = &c->ref_pic[c->ref_count - 1 - i];
 		}
+
+		split_ref_fields(h->RefPicList0, sorted, c->ref_count, cur_field);
 	}
 	else if (h->slice_type == SLICE_TYPE_B)
 	{
-		qsort(c->ref_frames, c->ref_count, sizeof(c->ref_frames[0]), &sort_ref_frames_by_poc);
+		qsort(c->ref_pic, c->ref_count, sizeof(c->ref_pic[0]), &sort_ref_pics_by_poc);
+
+		int cur_poc;
+		if (h->field_pic_flag)
+			cur_poc = (uint16_t)info->field_order_cnt[cur_field == PIC_BOTTOM_FIELD];
+		else
+			cur_poc = min((uint16_t)info->field_order_cnt[0], (uint16_t)info->field_order_cnt[1]);
+
 		int i;
 		int ptr0 = 0, ptr1 = 0;
+		h264_picture_t *sorted[2][16];
 		for (i = 0; i < c->ref_count; i++)
 		{
-			if (c->ref_frames[c->ref_count - 1 - i].top_pic_order_cnt <= (uint16_t)info->field_order_cnt[0])
-				h->RefPicList0[ptr0++] = &c->ref_frames[c->ref_count - 1  - i];
+			if (pic_order_cnt(&c->ref_pic[c->ref_count - 1 - i]) <= cur_poc)
+				sorted[0][ptr0++] = &c->ref_pic[c->ref_count - 1  - i];
 
-			if (c->ref_frames[i].top_pic_order_cnt > (uint16_t)info->field_order_cnt[0])
-				h->RefPicList1[ptr1++] = &c->ref_frames[i];
+			if (pic_order_cnt(&c->ref_pic[i]) > cur_poc)
+				sorted[1][ptr1++] = &c->ref_pic[i];
 		}
 		for (i = 0; i < c->ref_count; i++)
 		{
-			if (c->ref_frames[i].top_pic_order_cnt > (uint16_t)info->field_order_cnt[0])
-				h->RefPicList0[ptr0++] = &c->ref_frames[i];
+			if (pic_order_cnt(&c->ref_pic[i]) > cur_poc)
+				sorted[0][ptr0++] = &c->ref_pic[i];
 
-			if (c->ref_frames[c->ref_count - 1 - i].top_pic_order_cnt <= (uint16_t)info->field_order_cnt[0])
-				h->RefPicList1[ptr1++] = &c->ref_frames[c->ref_count - 1 - i];
+			if (pic_order_cnt(&c->ref_pic[c->ref_count - 1 - i]) <= cur_poc)
+				sorted[1][ptr1++] = &c->ref_pic[c->ref_count - 1 - i];
 		}
+
+		split_ref_fields(h->RefPicList0, sorted[0], c->ref_count, cur_field);
+		split_ref_fields(h->RefPicList1, sorted[1], c->ref_count, cur_field);
 	}
 }
 
@@ -531,8 +601,10 @@ static void fill_frame_lists(h264_context_t *c)
 	h264_video_private_t *output_p = (h264_video_private_t *)c->output->decoder_private;
 
 	// collect reference frames
-	h264_reference_frame_t *frame_list[18];
+	h264_picture_t *frame_list[18];
 	memset(frame_list, 0, sizeof(frame_list));
+
+	int output_placed = 0;
 
 	for (i = 0; i < 16; i++)
 	{
@@ -545,28 +617,30 @@ static void fill_frame_lists(h264_context_t *c)
 			video_surface_ctx_t *surface = handle_get(rf->surface);
 			h264_video_private_t *surface_p = (h264_video_private_t *)surface->decoder_private;
 
+			if (surface == c->output)
+				output_placed = 1;
+
 			if (!surface_p)
 			{
 				VDPAU_DBG("non-existent reference frame, fake it");
 				surface_p = calloc(1, sizeof(h264_video_private_t));
 
-				surface_p->extra_data_len = (c->picture_width_in_mbs_minus1 + 1) * (c->picture_height_in_mbs_minus1 + 1) * 32;
-				surface_p->extra_data = ve_malloc(surface_p->extra_data_len);
+				surface_p->extra_data = ve_malloc(c->video_extra_data_len);
 				surface_p->pos = 0;
 
 				surface->decoder_private = surface_p;
 				surface->decoder_private_free = h264_video_private_free;
 			}
 
-			c->ref_frames[c->ref_count].surface = surface;
-			c->ref_frames[c->ref_count].top_pic_order_cnt = rf->field_order_cnt[0];
-			c->ref_frames[c->ref_count].bottom_pic_order_cnt = rf->field_order_cnt[1];
-			c->ref_frames[c->ref_count].frame_idx = rf->frame_idx;
-			c->ref_frames[c->ref_count].flags =
-				(rf->top_is_reference ? REF_FLAG_TOP_REF : 0) |
-				(rf->bottom_is_reference ? REF_FLAG_BOTTOM_REF : 0);
+			c->ref_pic[c->ref_count].surface = surface;
+			c->ref_pic[c->ref_count].top_pic_order_cnt = rf->field_order_cnt[0];
+			c->ref_pic[c->ref_count].bottom_pic_order_cnt = rf->field_order_cnt[1];
+			c->ref_pic[c->ref_count].frame_idx = rf->frame_idx;
+			c->ref_pic[c->ref_count].field =
+				(rf->top_is_reference ? PIC_TOP_FIELD : 0) |
+				(rf->bottom_is_reference ? PIC_BOTTOM_FIELD : 0);
 
-			frame_list[surface_p->pos] = &c->ref_frames[c->ref_count];
+			frame_list[surface_p->pos] = &c->ref_pic[c->ref_count];
 			c->ref_count++;
 		}
 	}
@@ -574,18 +648,17 @@ static void fill_frame_lists(h264_context_t *c)
 	// write picture buffer list
 	writel(VE_SRAM_H264_FRAMEBUFFER_LIST, c->regs + VE_H264_RAM_WRITE_PTR);
 
-	int output_placed = 0;
 	for (i = 0; i < 18; i++)
 	{
 		if (!output_placed && !frame_list[i])
 		{
 			writel((uint16_t)c->info->field_order_cnt[0], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((uint16_t)c->info->field_order_cnt[1], c->regs + VE_H264_RAM_WRITE_DATA);
-			writel((c->info->is_reference) ? 0x22 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(c->info->field_pic_flag ? 0x100 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(c->output->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(c->output->yuv->data) + c->output->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(output_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(output_p->extra_data) + (output_p->extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(output_p->extra_data) + (c->video_extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 
 			output_p->pos = i;
@@ -604,11 +677,11 @@ static void fill_frame_lists(h264_context_t *c)
 
 			writel(frame_list[i]->top_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(frame_list[i]->bottom_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(c->info->field_pic_flag ? 0x100 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface->yuv->data) + surface->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(surface_p->extra_data) + (surface_p->extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(surface_p->extra_data) + (c->video_extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 		}
 	}
@@ -650,15 +723,13 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	h264_context_t *c = calloc(1, sizeof(h264_context_t));
 	c->regs = ve_get_regs();
 	c->picture_width_in_mbs_minus1 = (decoder->width - 1) / 16;
-	c->picture_height_in_mbs_minus1 = (decoder->height - 1) / 16;
+	if (info->field_pic_flag)
+		c->picture_height_in_mbs_minus1 = ((decoder->height / 2) - 1) / 16;
+	else
+		c->picture_height_in_mbs_minus1 = (decoder->height - 1) / 16;
 	c->info = info;
 	c->output = output;
-
-	if (!c->info->frame_mbs_only_flag)
-	{
-		VDPAU_DBG("We can't decode interlaced Frames yet! Sorry");
-		return VDP_STATUS_ERROR;
-	}
+	c->video_extra_data_len = ((decoder->width + 15) / 16) * ((decoder->height + 15) / 16) * 32;
 
 	if (!c->output->decoder_private)
 	{
@@ -667,8 +738,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 			return VDP_STATUS_RESOURCES;
 
 		// create extra buffer
-		output_p->extra_data_len = (c->picture_width_in_mbs_minus1 + 1) * (c->picture_height_in_mbs_minus1 + 1) * 32;
-		output_p->extra_data = ve_malloc(output_p->extra_data_len);
+		output_p->extra_data = ve_malloc(c->video_extra_data_len);
 
 		c->output->decoder_private = output_p;
 		c->output->decoder_private_free = h264_video_private_free;
@@ -754,10 +824,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 				int j;
 				uint32_t list = 0;
 				for (j = 0; j < 4; j++)
-					if (h->RefPicList0[i + j])
+					if (h->RefPicList0[i + j].surface)
 					{
-						h264_video_private_t *surface_p = (h264_video_private_t *)h->RefPicList0[i + j]->surface->decoder_private;
-						list |= ((surface_p->pos * 2) << (j * 8));
+						h264_video_private_t *surface_p = (h264_video_private_t *)h->RefPicList0[i + j].surface->decoder_private;
+						list |= ((surface_p->pos * 2 + (h->RefPicList0[i + j].field == PIC_BOTTOM_FIELD)) << (j * 8));
 					}
 				writel(list, c->regs + VE_H264_RAM_WRITE_DATA);
 			}
@@ -770,10 +840,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 				int j;
 				uint32_t list = 0;
 				for (j = 0; j < 4; j++)
-					if (h->RefPicList1[i + j])
+					if (h->RefPicList1[i + j].surface)
 					{
-						h264_video_private_t *surface_p = (h264_video_private_t *)h->RefPicList1[i + j]->surface->decoder_private;
-						list |= ((surface_p->pos * 2) << (j * 8));
+						h264_video_private_t *surface_p = (h264_video_private_t *)h->RefPicList1[i + j].surface->decoder_private;
+						list |= ((surface_p->pos * 2 + (h->RefPicList1[i + j].field  == PIC_BOTTOM_FIELD)) << (j * 8));
 					}
 				writel(list, c->regs + VE_H264_RAM_WRITE_DATA);
 			}
