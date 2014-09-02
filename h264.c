@@ -154,10 +154,15 @@ static void h264_private_free(decoder_ctx_t *decoder)
 	free(decoder_p);
 }
 
+#define PIC_TYPE_FRAME	0x0
+#define PIC_TYPE_FIELD	0x1
+#define PIC_TYPE_MBAFF	0x2
+
 typedef struct
 {
 	void *extra_data;
-	int pos;
+	uint8_t pos;
+	uint8_t pic_type;
 } h264_video_private_t;
 
 static void h264_video_private_free(video_surface_ctx_t *surface)
@@ -165,6 +170,30 @@ static void h264_video_private_free(video_surface_ctx_t *surface)
 	h264_video_private_t *surface_p = (h264_video_private_t *)surface->decoder_private;
 	ve_free(surface_p->extra_data);
 	free(surface_p);
+}
+
+static h264_video_private_t *get_surface_priv(h264_context_t *c, video_surface_ctx_t *surface)
+{
+	h264_video_private_t *surface_p = surface->decoder_private;
+
+	if (!surface_p)
+	{
+		surface_p = calloc(1, sizeof(h264_video_private_t));
+		if (!surface_p)
+			return NULL;
+
+		surface_p->extra_data = ve_malloc(c->video_extra_data_len * 2);
+		if (!surface_p->extra_data)
+		{
+			free(surface_p);
+			return NULL;
+		}
+
+		surface->decoder_private = surface_p;
+		surface->decoder_private_free = h264_video_private_free;
+	}
+
+	return surface_p;
 }
 
 static void ref_pic_list_modification(h264_context_t *c)
@@ -615,22 +644,10 @@ static void fill_frame_lists(h264_context_t *c)
 				VDPAU_DBG("NOT IMPLEMENTED: We got a longterm reference!");
 
 			video_surface_ctx_t *surface = handle_get(rf->surface);
-			h264_video_private_t *surface_p = (h264_video_private_t *)surface->decoder_private;
+			h264_video_private_t *surface_p = get_surface_priv(c, surface);
 
 			if (surface == c->output)
 				output_placed = 1;
-
-			if (!surface_p)
-			{
-				VDPAU_DBG("non-existent reference frame, fake it");
-				surface_p = calloc(1, sizeof(h264_video_private_t));
-
-				surface_p->extra_data = ve_malloc(c->video_extra_data_len);
-				surface_p->pos = 0;
-
-				surface->decoder_private = surface_p;
-				surface->decoder_private_free = h264_video_private_free;
-			}
 
 			c->ref_pic[c->ref_count].surface = surface;
 			c->ref_pic[c->ref_count].top_pic_order_cnt = rf->field_order_cnt[0];
@@ -654,11 +671,11 @@ static void fill_frame_lists(h264_context_t *c)
 		{
 			writel((uint16_t)c->info->field_order_cnt[0], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((uint16_t)c->info->field_order_cnt[1], c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->info->field_pic_flag ? 0x100 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(output_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(c->output->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(c->output->yuv->data) + c->output->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(output_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(output_p->extra_data) + (c->video_extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(output_p->extra_data) + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 
 			output_p->pos = i;
@@ -677,11 +694,11 @@ static void fill_frame_lists(h264_context_t *c)
 
 			writel(frame_list[i]->top_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(frame_list[i]->bottom_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->info->field_pic_flag ? 0x100 : 0x0, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(surface_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface->yuv->data), c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface->yuv->data) + surface->plane_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(ve_virt2phys(surface_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(ve_virt2phys(surface_p->extra_data) + (c->video_extra_data_len / 2), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(ve_virt2phys(surface_p->extra_data) + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 		}
 	}
@@ -723,7 +740,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	h264_context_t *c = calloc(1, sizeof(h264_context_t));
 	c->regs = ve_get_regs();
 	c->picture_width_in_mbs_minus1 = (decoder->width - 1) / 16;
-	if (info->field_pic_flag)
+	if (!info->frame_mbs_only_flag)
 		c->picture_height_in_mbs_minus1 = ((decoder->height / 2) - 1) / 16;
 	else
 		c->picture_height_in_mbs_minus1 = (decoder->height - 1) / 16;
@@ -731,18 +748,16 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	c->output = output;
 	c->video_extra_data_len = ((decoder->width + 15) / 16) * ((decoder->height + 15) / 16) * 32;
 
-	if (!c->output->decoder_private)
-	{
-		h264_video_private_t *output_p = calloc(1, sizeof(h264_video_private_t));
-		if (!output_p)
-			return VDP_STATUS_RESOURCES;
+	h264_video_private_t *output_p = get_surface_priv(c, output);
+	if (!output_p)
+		return VDP_STATUS_RESOURCES;
 
-		// create extra buffer
-		output_p->extra_data = ve_malloc(c->video_extra_data_len);
-
-		c->output->decoder_private = output_p;
-		c->output->decoder_private_free = h264_video_private_free;
-	}
+	if (info->field_pic_flag)
+		output_p->pic_type = PIC_TYPE_FIELD;
+	else if (info->mb_adaptive_frame_field_flag)
+		output_p->pic_type = PIC_TYPE_MBAFF;
+	else
+		output_p->pic_type = PIC_TYPE_FRAME;
 
 	// activate H264 engine
 	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1
@@ -870,7 +885,8 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 		// slice parameters
 		writel((((h->first_mb_in_slice % (c->picture_width_in_mbs_minus1 + 1)) & 0xff) << 24)
-			| (((h->first_mb_in_slice / (c->picture_width_in_mbs_minus1 + 1)) & 0xff) << 16)
+			| (((h->first_mb_in_slice / (c->picture_width_in_mbs_minus1 + 1)) & 0xff) *
+				(output_p->pic_type == PIC_TYPE_MBAFF ? 2 : 1) << 16)
 			| ((info->is_reference & 0x1) << 12)
 			| ((h->slice_type & 0xf) << 8)
 			| ((slice == 0 ? 0x1 : 0x0) << 5)
