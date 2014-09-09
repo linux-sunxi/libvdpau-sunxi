@@ -226,7 +226,7 @@ void rgba_clear(rgba_surface_t *rgba)
 		return;
 
 	rgba_fill(rgba, &rgba->dirty, 0x00000000);
-	rgba->flags &= ~(RGBA_FLAG_DIRTY || RGBA_FLAG_NEEDS_CLEAR);
+	rgba->flags &= ~(RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_CLEAR);
 	rgba->dirty.x0 = rgba->width;
 	rgba->dirty.y0 = rgba->height;
 	rgba->dirty.x1 = 0;
