@@ -49,14 +49,14 @@ static VdpStatus yuv_new(video_surface_ctx_t *video_surface)
 	switch (video_surface->chroma_type)
 	{
 	case VDP_CHROMA_TYPE_444:
-		video_surface->yuv->data = ve_malloc(video_surface->plane_size * 3);
+		video_surface->yuv->data = ve_malloc(video_surface->luma_size * 3);
 		break;
 	case VDP_CHROMA_TYPE_422:
-		video_surface->yuv->data = ve_malloc(video_surface->plane_size * 2);
+		video_surface->yuv->data = ve_malloc(video_surface->luma_size * 2);
 		break;
 	case VDP_CHROMA_TYPE_420:
-		video_surface->yuv->data = ve_malloc(video_surface->plane_size +
-						(video_surface->plane_size / 2));
+		video_surface->yuv->data = ve_malloc(video_surface->luma_size +
+			ALIGN(video_surface->width, 32) * ALIGN(video_surface->height / 2, 32));
 		break;
 	default:
 		free(video_surface->yuv);
@@ -92,7 +92,7 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
 
-	if (!width || !height)
+	if (width < 1 || width > 8192 || height < 1 || height > 8192)
 		return VDP_STATUS_INVALID_SIZE;
 
 	device_ctx_t *dev = handle_get(device);
@@ -108,7 +108,7 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 	vs->height = height;
 	vs->chroma_type = chroma_type;
 
-	vs->plane_size = ((width + 63) & ~63) * ((height + 63) & ~63);
+	vs->luma_size = ALIGN(width, 32) * ALIGN(height, 32);
 
 	VdpStatus ret = yuv_new(vs);
 	if (ret != VDP_STATUS_OK)
@@ -230,7 +230,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 			dst += vs->width;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data + vs->plane_size;
+		dst = vs->yuv->data + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[1];
@@ -249,14 +249,14 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 			dst += vs->width;
 		}
 		src = source_data[2];
-		dst = vs->yuv->data + vs->plane_size;
+		dst = vs->yuv->data + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[1];
 			dst += vs->width / 2;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data + vs->plane_size + vs->plane_size / 4;
+		dst = vs->yuv->data + vs->luma_size + vs->luma_size / 4;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[2];

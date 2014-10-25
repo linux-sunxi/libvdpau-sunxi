@@ -54,7 +54,7 @@ typedef struct video_surface_ctx_struct
 	VdpChromaType chroma_type;
 	VdpYCbCrFormat source_format;
 	yuv_data_t *yuv;
-	int plane_size;
+	int luma_size;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 } video_surface_ctx_t;
@@ -146,6 +146,8 @@ typedef struct
         ({ __typeof__ (a) _a = (a); \
            __typeof__ (b) _b = (b); \
            _a < _b ? (_a == 0 ? _b : _a) : (_b == 0 ? _a : _b); })
+
+#define ALIGN(x, a) (((x) + ((typeof(x))(a) - 1)) & ~((typeof(x))(a) - 1))
 
 #ifdef DEBUG
 #include <stdio.h>
