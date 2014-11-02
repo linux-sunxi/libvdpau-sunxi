@@ -1,7 +1,7 @@
 TARGET = libvdpau_sunxi.so.1
 SRC = device.c presentation_queue.c surface_output.c surface_video.c \
 	surface_bitmap.c video_mixer.c decoder.c handles.c ve.c \
-	h264.c mpeg12.c mp4.c rgba.c
+	h264.c mpeg12.c mp4.c rgba.c tiled_yuv.S
 CFLAGS = -Wall -O3
 LDFLAGS =
 LIBS = -lrt -lm -lX11
@@ -41,5 +41,8 @@ uninstall:
 
 %.o: %.c
 	$(CC) $(DEP_CFLAGS) $(LIB_CFLAGS) $(CFLAGS) -c $< -o $@
+
+%.o: %.S
+	$(CC) -c $< -o $@
 
 include $(wildcard $(DEP))
