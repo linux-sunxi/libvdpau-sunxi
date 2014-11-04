@@ -174,8 +174,6 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	// guessed in lack of documentation, bigger pictures should be possible
-	*max_level = 16;
 	*max_width = 3840;
 	*max_height = 2160;
 	*max_macroblocks = (*max_width * *max_height) / (16 * 16);
@@ -183,13 +181,20 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 	switch (profile)
 	{
 	case VDP_DECODER_PROFILE_MPEG1:
+		*max_level = VDP_DECODER_LEVEL_MPEG1_NA;
+		*is_supported = VDP_TRUE;
+		break;
 	case VDP_DECODER_PROFILE_MPEG2_SIMPLE:
 	case VDP_DECODER_PROFILE_MPEG2_MAIN:
+		*max_level = VDP_DECODER_LEVEL_MPEG2_HL;
+		*is_supported = VDP_TRUE;
+		break;
 	case VDP_DECODER_PROFILE_H264_BASELINE:
 	case VDP_DECODER_PROFILE_H264_MAIN:
 	case VDP_DECODER_PROFILE_H264_HIGH:
 	case VDP_DECODER_PROFILE_MPEG4_PART2_SP:
 	case VDP_DECODER_PROFILE_MPEG4_PART2_ASP:
+		*max_level = VDP_DECODER_LEVEL_H264_5_1;
 		*is_supported = VDP_TRUE;
 		break;
 
