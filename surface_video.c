@@ -182,6 +182,9 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	if (vs->chroma_type != VDP_CHROMA_TYPE_420 || vs->source_format != INTERNAL_YCBCR_FORMAT)
 		return VDP_STATUS_INVALID_Y_CB_CR_FORMAT;
 
+	if (destination_pitches[0] < vs->width || destination_pitches[1] < vs->width / 2)
+		return VDP_STATUS_ERROR;
+
 	switch (destination_ycbcr_format)
 	{
 	case VDP_YCBCR_FORMAT_NV12:
@@ -190,6 +193,8 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 		return VDP_STATUS_OK;
 
 	case VDP_YCBCR_FORMAT_YV12:
+		if (destination_pitches[2] != destination_pitches[1])
+			return VDP_STATUS_ERROR;
 		tiled_to_planar(vs->yuv->data, destination_data[0], destination_pitches[0], vs->width, vs->height);
 		tiled_deinterleave_to_planar(vs->yuv->data + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
