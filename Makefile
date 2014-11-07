@@ -10,7 +10,7 @@ CC = gcc
 MAKEFLAGS += -rR --no-print-directory
 
 DEP_CFLAGS = -MD -MP -MQ $@
-LIB_CFLAGS = -fpic
+LIB_CFLAGS = -fpic -fvisibility=hidden
 LIB_LDFLAGS = -shared -Wl,-soname,$(TARGET)
 
 OBJ = $(addsuffix .o,$(basename $(SRC)))
