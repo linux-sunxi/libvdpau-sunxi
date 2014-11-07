@@ -160,7 +160,7 @@ typedef struct
 
 VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
-VdpStatus new_decoder_mp4(decoder_ctx_t *decoder);
+VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder);
 
 void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);

@@ -65,7 +65,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 
 	case VDP_DECODER_PROFILE_MPEG4_PART2_SP:
 	case VDP_DECODER_PROFILE_MPEG4_PART2_ASP:
-		ret = new_decoder_mp4(dec);
+		ret = new_decoder_mpeg4(dec);
 		break;
 
 	default:

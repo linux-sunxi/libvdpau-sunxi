@@ -78,11 +78,11 @@ typedef struct
 	void *mbh_buffer;
 	void *dcac_buffer;
 	void *ncf_buffer;
-} mp4_private_t;
+} mpeg4_private_t;
 
-static void mp4_private_free(decoder_ctx_t *decoder)
+static void mpeg4_private_free(decoder_ctx_t *decoder)
 {
-	mp4_private_t *decoder_p = (mp4_private_t *)decoder->private;
+	mpeg4_private_t *decoder_p = (mpeg4_private_t *)decoder->private;
 	ve_free(decoder_p->mbh_buffer);
 	ve_free(decoder_p->dcac_buffer);
 	ve_free(decoder_p->ncf_buffer);
@@ -141,13 +141,13 @@ static int decode_vop_header(bitstream *bs, VdpPictureInfoMPEG4Part2 const *info
 	return 1;
 }
 
-static VdpStatus mp4_decode(decoder_ctx_t *decoder,
-                            VdpPictureInfo const *_info,
-                            const int len,
-                            video_surface_ctx_t *output)
+static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
+                              VdpPictureInfo const *_info,
+                              const int len,
+                              video_surface_ctx_t *output)
 {
 	VdpPictureInfoMPEG4Part2 const *info = (VdpPictureInfoMPEG4Part2 const *)_info;
-	mp4_private_t *decoder_p = (mp4_private_t *)decoder->private;
+	mpeg4_private_t *decoder_p = (mpeg4_private_t *)decoder->private;
 
 	if (!info->resync_marker_disable)
 	{
@@ -270,9 +270,9 @@ static VdpStatus mp4_decode(decoder_ctx_t *decoder,
 	return VDP_STATUS_OK;
 }
 
-VdpStatus new_decoder_mp4(decoder_ctx_t *decoder)
+VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder)
 {
-	mp4_private_t *decoder_p = calloc(1, sizeof(mp4_private_t));
+	mpeg4_private_t *decoder_p = calloc(1, sizeof(mpeg4_private_t));
 	if (!decoder_p)
 		goto err_priv;
 
@@ -291,9 +291,9 @@ VdpStatus new_decoder_mp4(decoder_ctx_t *decoder)
 	if (!decoder_p->ncf_buffer)
 		goto err_ncf;
 
-	decoder->decode = mp4_decode;
+	decoder->decode = mpeg4_decode;
 	decoder->private = decoder_p;
-	decoder->private_free = mp4_private_free;
+	decoder->private_free = mpeg4_private_free;
 
 	return VDP_STATUS_OK;
 
