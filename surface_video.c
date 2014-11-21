@@ -100,7 +100,7 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	video_surface_ctx_t *vs = calloc(1, sizeof(video_surface_ctx_t));
+	video_surface_ctx_t *vs = handle_create(sizeof(*vs), surface);
 	if (!vs)
 		return VDP_STATUS_RESOURCES;
 
@@ -114,20 +114,9 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 	VdpStatus ret = yuv_new(vs);
 	if (ret != VDP_STATUS_OK)
 	{
-		free(vs);
+		handle_destroy(*surface);
 		return ret;
 	}
-
-	int handle = handle_create(vs);
-	if (handle == -1)
-	{
-		ve_free(vs->yuv->data);
-		free(vs->yuv);
-		free(vs);
-		return VDP_STATUS_RESOURCES;
-	}
-
-	*surface = handle;
 
 	return VDP_STATUS_OK;
 }
@@ -144,7 +133,6 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 	yuv_unref(vs->yuv);
 
 	handle_destroy(surface);
-	free(vs);
 
 	return VDP_STATUS_OK;
 }

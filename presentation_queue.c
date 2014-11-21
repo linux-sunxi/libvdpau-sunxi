@@ -48,7 +48,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	queue_target_ctx_t *qt = calloc(1, sizeof(queue_target_ctx_t));
+	queue_target_ctx_t *qt = handle_create(sizeof(*qt), target);
 	if (!qt)
 		return VDP_STATUS_RESOURCES;
 
@@ -56,7 +56,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	qt->fd = open("/dev/disp", O_RDWR);
 	if (qt->fd == -1)
 	{
-		free(qt);
+		handle_destroy(*target);
 		return VDP_STATUS_ERROR;
 	}
 
@@ -64,7 +64,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	if (ioctl(qt->fd, DISP_CMD_VERSION, &tmp) < 0)
 	{
 		close(qt->fd);
-		free(qt);
+		handle_destroy(*target);
 		return VDP_STATUS_ERROR;
 	}
 
@@ -103,22 +103,15 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
 	}
 
-	int handle = handle_create(qt);
-	if (handle == -1)
-		goto out_handle_create;
 
-	*target = handle;
 	return VDP_STATUS_OK;
 
-out_handle_create:
-	args[1] = qt->layer_top;
-	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
 out_layer_top:
 	args[1] = qt->layer;
 	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
 out_layer:
 	close(qt->fd);
-	free(qt);
+	handle_destroy(*target);
 	return VDP_STATUS_RESOURCES;
 }
 
@@ -142,7 +135,6 @@ VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget prese
 	close(qt->fd);
 
 	handle_destroy(presentation_queue_target);
-	free(qt);
 
 	return VDP_STATUS_OK;
 }
@@ -162,21 +154,13 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	if (!qt)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	queue_ctx_t *q = calloc(1, sizeof(queue_ctx_t));
+	queue_ctx_t *q = handle_create(sizeof(*q), presentation_queue);
 	if (!q)
 		return VDP_STATUS_RESOURCES;
 
 	q->target = qt;
 	q->device = dev;
 
-	int handle = handle_create(q);
-	if (handle == -1)
-	{
-		free(q);
-		return VDP_STATUS_RESOURCES;
-	}
-
-	*presentation_queue = handle;
 	return VDP_STATUS_OK;
 }
 
@@ -187,7 +171,6 @@ VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue
 		return VDP_STATUS_INVALID_HANDLE;
 
 	handle_destroy(presentation_queue);
-	free(q);
 
 	return VDP_STATUS_OK;
 }

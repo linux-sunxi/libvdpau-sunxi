@@ -34,24 +34,13 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	mixer_ctx_t *mix = calloc(1, sizeof(mixer_ctx_t));
+	mixer_ctx_t *mix = handle_create(sizeof(*mix), mixer);
 	if (!mix)
 		return VDP_STATUS_RESOURCES;
 
 	mix->device = dev;
 	mix->contrast = 1.0;
 	mix->saturation = 1.0;
-
-	int handle = handle_create(mix);
-	if (handle == -1)
-	{
-		free(mix);
-		return VDP_STATUS_RESOURCES;
-	}
-
-
-
-	*mixer = handle;
 
 	return VDP_STATUS_OK;
 }
@@ -63,7 +52,6 @@ VdpStatus vdp_video_mixer_destroy(VdpVideoMixer mixer)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	handle_destroy(mixer);
-	free(mix);
 
 	return VDP_STATUS_OK;
 }

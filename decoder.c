@@ -35,7 +35,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 	if (max_references > 16)
 		return VDP_STATUS_ERROR;
 
-	decoder_ctx_t *dec = calloc(1, sizeof(decoder_ctx_t));
+	decoder_ctx_t *dec = handle_create(sizeof(*dec), decoder);
 	if (!dec)
 		goto err_ctx;
 
@@ -76,20 +76,12 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 	if (ret != VDP_STATUS_OK)
 		goto err_decoder;
 
-	int handle = handle_create(dec);
-	if (handle == -1)
-		goto err_handle;
-
-	*decoder = handle;
 	return VDP_STATUS_OK;
 
-err_handle:
-	if (dec->private_free)
-		dec->private_free(dec);
 err_decoder:
 	ve_free(dec->data);
 err_data:
-	free(dec);
+	handle_destroy(*decoder);
 err_ctx:
 	return VDP_STATUS_RESOURCES;
 }
@@ -106,7 +98,6 @@ VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
 	ve_free(dec->data);
 
 	handle_destroy(decoder);
-	free(dec);
 
 	return VDP_STATUS_OK;
 }

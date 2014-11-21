@@ -168,9 +168,11 @@ void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);
 VdpStatus yuv_prepare(video_surface_ctx_t *video_surface);
 
-int handle_create(void *data);
-void *handle_get(int handle);
-void handle_destroy(int handle);
+typedef uint32_t VdpHandle;
+
+void *handle_create(size_t size, VdpHandle *handle);
+void *handle_get(VdpHandle handle);
+void handle_destroy(VdpHandle handle);
 
 EXPORT VdpStatus vdp_imp_device_create_x11(Display *display, int screen, VdpDevice *device, VdpGetProcAddress **get_proc_address);
 VdpStatus vdp_device_destroy(VdpDevice device);
