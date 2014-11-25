@@ -18,6 +18,7 @@
  */
 
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,7 +82,8 @@ static struct
 	void *regs;
 	int version;
 	struct memchunk_t first_memchunk;
-} ve = { .fd = -1 };
+	pthread_rwlock_t memory_lock;
+} ve = { .fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER };
 
 int ve_open(void)
 {
@@ -160,6 +162,11 @@ void *ve_malloc(int size)
 	if (ve.fd == -1)
 		return NULL;
 
+	if (pthread_rwlock_wrlock(&ve.memory_lock))
+		return NULL;
+
+	void *addr = NULL;
+
 	size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	struct memchunk_t *c, *best_chunk = NULL;
 	for (c = &ve.first_memchunk; c != NULL; c = c->next)
@@ -175,14 +182,18 @@ void *ve_malloc(int size)
 	}
 
 	if (!best_chunk)
-		return NULL;
+		goto out;
 
 	int left_size = best_chunk->size - size;
 
-	best_chunk->virt_addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, best_chunk->phys_addr + PAGE_OFFSET);
-	if (best_chunk->virt_addr == MAP_FAILED)
-		return NULL;
+	addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, best_chunk->phys_addr + PAGE_OFFSET);
+	if (addr == MAP_FAILED)
+	{
+		addr = NULL;
+		goto out;
+	}
 
+	best_chunk->virt_addr = addr;
 	best_chunk->size = size;
 
 	if (left_size > 0)
@@ -195,7 +206,9 @@ void *ve_malloc(int size)
 		best_chunk->next = c;
 	}
 
-	return best_chunk->virt_addr;
+out:
+	pthread_rwlock_unlock(&ve.memory_lock);
+	return addr;
 }
 
 void ve_free(void *ptr)
@@ -204,6 +217,9 @@ void ve_free(void *ptr)
 		return;
 
 	if (ptr == NULL)
+		return;
+
+	if (pthread_rwlock_wrlock(&ve.memory_lock))
 		return;
 
 	struct memchunk_t *c;
@@ -230,12 +246,19 @@ void ve_free(void *ptr)
 			}
 		}
 	}
+
+	pthread_rwlock_unlock(&ve.memory_lock);
 }
 
 uint32_t ve_virt2phys(void *ptr)
 {
 	if (ve.fd == -1)
 		return 0;
+
+	if (pthread_rwlock_rdlock(&ve.memory_lock))
+		return 0;
+
+	uint32_t addr = 0;
 
 	struct memchunk_t *c;
 	for (c = &ve.first_memchunk; c != NULL; c = c->next)
@@ -244,12 +267,19 @@ uint32_t ve_virt2phys(void *ptr)
 			continue;
 
 		if (c->virt_addr == ptr)
-			return c->phys_addr;
+		{
+			addr = c->phys_addr;
+			break;
+		}
 		else if (ptr > c->virt_addr && ptr < (c->virt_addr + c->size))
-			return c->phys_addr + (ptr - c->virt_addr);
+		{
+			addr = c->phys_addr + (ptr - c->virt_addr);
+			break;
+		}
 	}
 
-	return 0;
+	pthread_rwlock_unlock(&ve.memory_lock);
+	return addr;
 }
 
 void ve_flush_cache(void *start, int len)
