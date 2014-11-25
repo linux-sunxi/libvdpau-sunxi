@@ -4,7 +4,7 @@ SRC = device.c presentation_queue.c surface_output.c surface_video.c \
 	h264.c mpeg12.c mpeg4.c rgba.c tiled_yuv.S
 CFLAGS = -Wall -O3
 LDFLAGS =
-LIBS = -lrt -lm -lX11
+LIBS = -lrt -lm -lX11 -lpthread
 CC = gcc
 
 MAKEFLAGS += -rR --no-print-directory
