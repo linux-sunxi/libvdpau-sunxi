@@ -159,7 +159,6 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	void *ve_regs = ve_get_regs();
 	bitstream bs = { .data = decoder->data, .length = len, .bitpos = 0 };
 
 	while (find_startcode(&bs))
@@ -172,7 +171,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 			continue;
 
 		// activate MPEG engine
-		writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x0, ve_regs + VE_CTRL);
+		void *ve_regs = ve_get(VE_ENGINE_MPEG, 0);
 
 		// set buffers
 		writel(ve_virt2phys(decoder_p->mbh_buffer), ve_regs + VE_MPEG_MBH_ADDR);
@@ -264,7 +263,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(readl(ve_regs + VE_MPEG_STATUS) | 0xf, ve_regs + VE_MPEG_STATUS);
 
 		// stop MPEG engine
-		writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x7, ve_regs + VE_CTRL);
+		ve_put();
 	}
 
 	return VDP_STATUS_OK;

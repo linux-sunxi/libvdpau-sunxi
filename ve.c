@@ -83,7 +83,8 @@ static struct
 	int version;
 	struct memchunk_t first_memchunk;
 	pthread_rwlock_t memory_lock;
-} ve = { .fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER };
+	pthread_mutex_t device_lock;
+} ve = { .fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER, .device_lock = PTHREAD_MUTEX_INITIALIZER };
 
 int ve_open(void)
 {
@@ -139,11 +140,6 @@ void ve_close(void)
 	ve.fd = -1;
 }
 
-void *ve_get_regs(void)
-{
-	return ve.regs;
-}
-
 int ve_get_version(void)
 {
 	return ve.version;
@@ -155,6 +151,22 @@ int ve_wait(int timeout)
 		return 0;
 
 	return ioctl(ve.fd, IOCTL_WAIT_VE, timeout);
+}
+
+void *ve_get(int engine, uint32_t flags)
+{
+	if (pthread_mutex_lock(&ve.device_lock))
+		return NULL;
+
+	writel(0x00130000 | (engine & 0xf) | (flags & ~0xf), ve.regs + VE_CTRL);
+
+	return ve.regs;
+}
+
+void ve_put(void)
+{
+	writel(0x00130007, ve.regs + VE_CTRL);
+	pthread_mutex_unlock(&ve.device_lock);
 }
 
 void *ve_malloc(int size)

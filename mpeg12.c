@@ -61,10 +61,9 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 		return ret;
 
 	int i;
-	void *ve_regs = ve_get_regs();
 
 	// activate MPEG engine
-	writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x0, ve_regs + VE_CTRL);
+	void *ve_regs = ve_get(VE_ENGINE_MPEG, 0);
 
 	// set quantisation tables
 	for (i = 0; i < 64; i++)
@@ -145,7 +144,7 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 	writel(0x0000c00f, ve_regs + VE_MPEG_STATUS);
 
 	// stop MPEG engine
-	writel((readl(ve_regs + VE_CTRL) & ~0xf) | 0x7, ve_regs + VE_CTRL);
+	ve_put();
 
 	return VDP_STATUS_OK;
 }

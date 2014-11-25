@@ -738,7 +738,6 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		return ret;
 
 	h264_context_t *c = calloc(1, sizeof(h264_context_t));
-	c->regs = ve_get_regs();
 	c->picture_width_in_mbs_minus1 = (decoder->width - 1) / 16;
 	if (!info->frame_mbs_only_flag)
 		c->picture_height_in_mbs_minus1 = ((decoder->height / 2) - 1) / 16;
@@ -760,8 +759,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		output_p->pic_type = PIC_TYPE_FRAME;
 
 	// activate H264 engine
-	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x1
-		| (decoder->width >= 2048 ? (0x1 << 21) : 0x0), c->regs + VE_CTRL);
+	c->regs = ve_get(VE_ENGINE_H264, (decoder->width >= 2048 ? 0x1 : 0x0) << 21);
 
 	// some buffers
 	uint32_t extra_buffers = ve_virt2phys(decoder_p->extra_data);
@@ -810,6 +808,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		if (h->nal_unit_type != 5 && h->nal_unit_type != 1)
 		{
 			free(c);
+			ve_put();
 			return VDP_STATUS_ERROR;
 		}
 
@@ -928,7 +927,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	}
 
 	// stop H264 engine
-	writel((readl(c->regs + VE_CTRL) & ~0xf) | 0x7, c->regs + VE_CTRL);
+	ve_put();
 
 	free(c);
 	return VDP_STATUS_OK;
