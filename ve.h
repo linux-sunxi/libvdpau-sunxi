@@ -24,7 +24,6 @@
 
 int ve_open(void);
 void ve_close(void);
-void ve_flush_cache(void *start, int len);
 void *ve_get_regs(void);
 int ve_get_version(void);
 int ve_wait(int timeout);
@@ -32,6 +31,7 @@ int ve_wait(int timeout);
 void *ve_malloc(int size);
 void ve_free(void *ptr);
 uint32_t ve_virt2phys(void *ptr);
+void ve_flush_cache(void *start, int len);
 
 static inline void writel(uint32_t val, void *addr)
 {
