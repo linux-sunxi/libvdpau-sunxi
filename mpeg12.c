@@ -21,6 +21,18 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
+static const uint8_t zigzag_scan[64] =
+{
+	 0,  1,  5,  6, 14, 15, 27, 28,
+	 2,  4,  7, 13, 16, 26, 29, 42,
+	 3,  8, 12, 17, 25, 30, 41, 43,
+	 9, 11, 18, 24, 31, 40, 44, 53,
+	10, 19, 23, 32, 39, 45, 52, 54,
+	20, 22, 33, 38, 46, 51, 55, 60,
+	21, 34, 37, 47, 50, 56, 59, 61,
+	35, 36, 48, 49, 57, 58, 62, 63
+};
+
 static int mpeg_find_startcode(const uint8_t *data, int len)
 {
 	int pos = 0;
@@ -67,9 +79,9 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 
 	// set quantisation tables
 	for (i = 0; i < 64; i++)
-		writel((uint32_t)(64 + i) << 8 | info->intra_quantizer_matrix[i], ve_regs + VE_MPEG_IQ_MIN_INPUT);
+		writel((uint32_t)(64 + zigzag_scan[i]) << 8 | info->intra_quantizer_matrix[i], ve_regs + VE_MPEG_IQ_MIN_INPUT);
 	for (i = 0; i < 64; i++)
-		writel((uint32_t)(i) << 8 | info->non_intra_quantizer_matrix[i], ve_regs + VE_MPEG_IQ_MIN_INPUT);
+		writel((uint32_t)(zigzag_scan[i]) << 8 | info->non_intra_quantizer_matrix[i], ve_regs + VE_MPEG_IQ_MIN_INPUT);
 
 	// set size
 	uint16_t width = (decoder->width + 15) / 16;
