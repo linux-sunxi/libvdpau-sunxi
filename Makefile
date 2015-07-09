@@ -2,12 +2,10 @@ TARGET = libvdpau_sunxi.so.1
 SRC = device.c presentation_queue.c surface_output.c surface_video.c \
 	surface_bitmap.c video_mixer.c decoder.c handles.c ve.c \
 	h264.c mpeg12.c mpeg4.c rgba.c tiled_yuv.S
-CFLAGS = -Wall -O3
-LDFLAGS =
+CFLAGS ?= -Wall -O3
+LDFLAGS ?=
 LIBS = -lrt -lm -lX11 -lpthread
-CC = gcc
-
-MAKEFLAGS += -rR --no-print-directory
+CC ?= gcc
 
 DEP_CFLAGS = -MD -MP -MQ $@
 LIB_CFLAGS = -fpic -fvisibility=hidden
@@ -22,7 +20,7 @@ ifeq ($(MODULEDIR),)
 MODULEDIR=/usr/lib/vdpau
 endif
 
-.PHONY: clean all install
+.PHONY: clean all install uninstall
 
 all: $(TARGET)
 $(TARGET): $(OBJ)
@@ -35,8 +33,10 @@ clean:
 
 install: $(TARGET)
 	install -D $(TARGET) $(DESTDIR)$(MODULEDIR)/$(TARGET)
+	ln -sf $(TARGET) $(DESTDIR)$(MODULEDIR)/$(basename $(TARGET))
 
 uninstall:
+	rm -f $(DESTDIR)$(MODULEDIR)/$(basename $(TARGET))
 	rm -f $(DESTDIR)$(MODULEDIR)/$(TARGET)
 
 %.o: %.c
