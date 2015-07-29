@@ -22,6 +22,13 @@
 #include "ve.h"
 #include "rgba.h"
 
+static void cleanup_video_mixer(void *ptr, void *meta)
+{
+	mixer_ctx_t *mixer = ptr;
+
+	sfree(mixer->device);
+}
+
 VdpStatus vdp_video_mixer_create(VdpDevice device,
                                  uint32_t feature_count,
                                  VdpVideoMixerFeature const *features,
@@ -30,30 +37,19 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
                                  void const *const *parameter_values,
                                  VdpVideoMixer *mixer)
 {
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	mixer_ctx_t *mix = handle_create(sizeof(*mix), mixer);
+	smart mixer_ctx_t *mix = handle_alloc(sizeof(*mix), cleanup_video_mixer);
 	if (!mix)
 		return VDP_STATUS_RESOURCES;
 
-	mix->device = dev;
+	mix->device = sref(dev);
 	mix->contrast = 1.0;
 	mix->saturation = 1.0;
 
-	return VDP_STATUS_OK;
-}
-
-VdpStatus vdp_video_mixer_destroy(VdpVideoMixer mixer)
-{
-	mixer_ctx_t *mix = handle_get(mixer);
-	if (!mix)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	handle_destroy(mixer);
-
-	return VDP_STATUS_OK;
+	return handle_create(mixer, mix);
 }
 
 VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
@@ -72,7 +68,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
                                  uint32_t layer_count,
                                  VdpLayer const *layers)
 {
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -85,13 +81,14 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 
 
 
-	output_surface_ctx_t *os = handle_get(destination_surface);
+	smart output_surface_ctx_t *os = handle_get(destination_surface);
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	if (os->yuv)
 		yuv_unref(os->yuv);
 
+	sfree(os->vs);
 	os->vs = handle_get(video_surface_current);
 	if (!(os->vs))
 		return VDP_STATUS_INVALID_HANDLE;
@@ -147,7 +144,7 @@ VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer,
 	if (!features || !feature_supports)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -166,7 +163,7 @@ VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer,
 	if (!features || !feature_enables)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -182,7 +179,7 @@ VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer,
 	if (!features || !feature_enables)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -218,7 +215,7 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -238,7 +235,7 @@ VdpStatus vdp_video_mixer_get_parameter_values(VdpVideoMixer mixer,
 	if (!parameters || !parameter_values)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -254,7 +251,7 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
 
-	mixer_ctx_t *mix = handle_get(mixer);
+	smart mixer_ctx_t *mix = handle_get(mixer);
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -269,7 +266,7 @@ VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device,
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -284,7 +281,7 @@ VdpStatus vdp_video_mixer_query_parameter_support(VdpDevice device,
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -312,7 +309,7 @@ VdpStatus vdp_video_mixer_query_parameter_value_range(VdpDevice device,
 	if (!min_value || !max_value)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -339,7 +336,7 @@ VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device,
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -356,7 +353,7 @@ VdpStatus vdp_video_mixer_query_attribute_value_range(VdpDevice device,
 	if (!min_value || !max_value)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 

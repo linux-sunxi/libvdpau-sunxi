@@ -116,13 +116,13 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 	// set forward/backward predicion buffers
 	if (info->forward_reference != VDP_INVALID_HANDLE)
 	{
-		video_surface_ctx_t *forward = handle_get(info->forward_reference);
+		smart video_surface_ctx_t *forward = handle_get(info->forward_reference);
 		writel(ve_virt2phys(forward->yuv->data), ve_regs + VE_MPEG_FWD_LUMA);
 		writel(ve_virt2phys(forward->yuv->data + forward->luma_size), ve_regs + VE_MPEG_FWD_CHROMA);
 	}
 	if (info->backward_reference != VDP_INVALID_HANDLE)
 	{
-		video_surface_ctx_t *backward = handle_get(info->backward_reference);
+		smart video_surface_ctx_t *backward = handle_get(info->backward_reference);
 		writel(ve_virt2phys(backward->yuv->data), ve_regs + VE_MPEG_BACK_LUMA);
 		writel(ve_virt2phys(backward->yuv->data + backward->luma_size), ve_regs + VE_MPEG_BACK_CHROMA);
 	}

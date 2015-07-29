@@ -643,7 +643,7 @@ static void fill_frame_lists(h264_context_t *c)
 			if (rf->is_long_term)
 				VDPAU_DBG("NOT IMPLEMENTED: We got a longterm reference!");
 
-			video_surface_ctx_t *surface = handle_get(rf->surface);
+			smart video_surface_ctx_t *surface = handle_get(rf->surface);
 			h264_video_private_t *surface_p = get_surface_priv(c, surface);
 
 			if (surface == c->output)

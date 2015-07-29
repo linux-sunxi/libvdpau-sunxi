@@ -19,6 +19,14 @@ or for mpv:
 
 Note: Make sure that you have write access to both /dev/disp and /dev/cedar_dev
 
+Dependencies:
+    - gcc >= 4.6
+    - C Smart Pointers library (https://snai.pe/c/c-smart-pointers/
+    To build libcsptr from source, e.g. do the following:
+        - git clone https://github.com/Snaipe/libcsptr.git
+        - cd libcsptr && mkdir build && cd build &&
+          cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && make && make install
+
 To enable OSD support for e.g. subtitles, set VDPAU_OSD environment
 variable to 1:
    $ export VDPAU_OSD=1

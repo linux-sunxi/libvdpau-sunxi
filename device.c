@@ -23,6 +23,16 @@
 #include "vdpau_private.h"
 #include "ve.h"
 
+static void cleanup_device(void *ptr, void *meta)
+{
+	device_ctx_t *device = ptr;
+
+	if (device->osd_enabled)
+		close(device->g2d_fd);
+	ve_close();
+	XCloseDisplay(device->display);
+}
+
 VdpStatus vdp_imp_device_create_x11(Display *display,
                                     int screen,
                                     VdpDevice *device,
@@ -31,7 +41,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	if (!display || !device || !get_proc_address)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_create(sizeof(*dev), device);
+	smart device_ctx_t *dev = handle_alloc(sizeof(*dev), cleanup_device);
 	if (!dev)
 		return VDP_STATUS_RESOURCES;
 
@@ -39,10 +49,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	dev->screen = screen;
 
 	if (!ve_open())
-	{
-		handle_destroy(*device);
 		return VDP_STATUS_ERROR;
-	}
 
 	char *env_vdpau_osd = getenv("VDPAU_OSD");
 	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
@@ -56,23 +63,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 
 	*get_proc_address = vdp_get_proc_address;
 
-	return VDP_STATUS_OK;
-}
-
-VdpStatus vdp_device_destroy(VdpDevice device)
-{
-	device_ctx_t *dev = handle_get(device);
-	if (!dev)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	if (dev->osd_enabled)
-		close(dev->g2d_fd);
-	ve_close();
-	XCloseDisplay(dev->display);
-
-	handle_destroy(device);
-
-	return VDP_STATUS_OK;
+	return handle_create(device, dev);
 }
 
 VdpStatus vdp_preemption_callback_register(VdpDevice device,
@@ -82,7 +73,7 @@ VdpStatus vdp_preemption_callback_register(VdpDevice device,
 	if (!callback)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -98,12 +89,12 @@ static void *const functions[] =
 	[VDP_FUNC_ID_GET_PROC_ADDRESS]                                      = vdp_get_proc_address,
 	[VDP_FUNC_ID_GET_API_VERSION]                                       = vdp_get_api_version,
 	[VDP_FUNC_ID_GET_INFORMATION_STRING]                                = vdp_get_information_string,
-	[VDP_FUNC_ID_DEVICE_DESTROY]                                        = vdp_device_destroy,
+	[VDP_FUNC_ID_DEVICE_DESTROY]                                        = handle_destroy,
 	[VDP_FUNC_ID_GENERATE_CSC_MATRIX]                                   = vdp_generate_csc_matrix,
 	[VDP_FUNC_ID_VIDEO_SURFACE_QUERY_CAPABILITIES]                      = vdp_video_surface_query_capabilities,
 	[VDP_FUNC_ID_VIDEO_SURFACE_QUERY_GET_PUT_BITS_Y_CB_CR_CAPABILITIES] = vdp_video_surface_query_get_put_bits_y_cb_cr_capabilities,
 	[VDP_FUNC_ID_VIDEO_SURFACE_CREATE]                                  = vdp_video_surface_create,
-	[VDP_FUNC_ID_VIDEO_SURFACE_DESTROY]                                 = vdp_video_surface_destroy,
+	[VDP_FUNC_ID_VIDEO_SURFACE_DESTROY]                                 = handle_destroy,
 	[VDP_FUNC_ID_VIDEO_SURFACE_GET_PARAMETERS]                          = vdp_video_surface_get_parameters,
 	[VDP_FUNC_ID_VIDEO_SURFACE_GET_BITS_Y_CB_CR]                        = vdp_video_surface_get_bits_y_cb_cr,
 	[VDP_FUNC_ID_VIDEO_SURFACE_PUT_BITS_Y_CB_CR]                        = vdp_video_surface_put_bits_y_cb_cr,
@@ -112,7 +103,7 @@ static void *const functions[] =
 	[VDP_FUNC_ID_OUTPUT_SURFACE_QUERY_PUT_BITS_INDEXED_CAPABILITIES]    = vdp_output_surface_query_put_bits_indexed_capabilities,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_QUERY_PUT_BITS_Y_CB_CR_CAPABILITIES]    = vdp_output_surface_query_put_bits_y_cb_cr_capabilities,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_CREATE]                                 = vdp_output_surface_create,
-	[VDP_FUNC_ID_OUTPUT_SURFACE_DESTROY]                                = vdp_output_surface_destroy,
+	[VDP_FUNC_ID_OUTPUT_SURFACE_DESTROY]                                = handle_destroy,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_GET_PARAMETERS]                         = vdp_output_surface_get_parameters,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_GET_BITS_NATIVE]                        = vdp_output_surface_get_bits_native,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_PUT_BITS_NATIVE]                        = vdp_output_surface_put_bits_native,
@@ -120,7 +111,7 @@ static void *const functions[] =
 	[VDP_FUNC_ID_OUTPUT_SURFACE_PUT_BITS_Y_CB_CR]                       = vdp_output_surface_put_bits_y_cb_cr,
 	[VDP_FUNC_ID_BITMAP_SURFACE_QUERY_CAPABILITIES]                     = vdp_bitmap_surface_query_capabilities,
 	[VDP_FUNC_ID_BITMAP_SURFACE_CREATE]                                 = vdp_bitmap_surface_create,
-	[VDP_FUNC_ID_BITMAP_SURFACE_DESTROY]                                = vdp_bitmap_surface_destroy,
+	[VDP_FUNC_ID_BITMAP_SURFACE_DESTROY]                                = handle_destroy,
 	[VDP_FUNC_ID_BITMAP_SURFACE_GET_PARAMETERS]                         = vdp_bitmap_surface_get_parameters,
 	[VDP_FUNC_ID_BITMAP_SURFACE_PUT_BITS_NATIVE]                        = vdp_bitmap_surface_put_bits_native,
 	[VDP_FUNC_ID_OUTPUT_SURFACE_RENDER_OUTPUT_SURFACE]                  = vdp_output_surface_render_output_surface,
@@ -128,7 +119,7 @@ static void *const functions[] =
 	[VDP_FUNC_ID_OUTPUT_SURFACE_RENDER_VIDEO_SURFACE_LUMA]              = NULL,
 	[VDP_FUNC_ID_DECODER_QUERY_CAPABILITIES]                            = vdp_decoder_query_capabilities,
 	[VDP_FUNC_ID_DECODER_CREATE]                                        = vdp_decoder_create,
-	[VDP_FUNC_ID_DECODER_DESTROY]                                       = vdp_decoder_destroy,
+	[VDP_FUNC_ID_DECODER_DESTROY]                                       = handle_destroy,
 	[VDP_FUNC_ID_DECODER_GET_PARAMETERS]                                = vdp_decoder_get_parameters,
 	[VDP_FUNC_ID_DECODER_RENDER]                                        = vdp_decoder_render,
 	[VDP_FUNC_ID_VIDEO_MIXER_QUERY_FEATURE_SUPPORT]                     = vdp_video_mixer_query_feature_support,
@@ -143,11 +134,11 @@ static void *const functions[] =
 	[VDP_FUNC_ID_VIDEO_MIXER_GET_FEATURE_ENABLES]                       = vdp_video_mixer_get_feature_enables,
 	[VDP_FUNC_ID_VIDEO_MIXER_GET_PARAMETER_VALUES]                      = vdp_video_mixer_get_parameter_values,
 	[VDP_FUNC_ID_VIDEO_MIXER_GET_ATTRIBUTE_VALUES]                      = vdp_video_mixer_get_attribute_values,
-	[VDP_FUNC_ID_VIDEO_MIXER_DESTROY]                                   = vdp_video_mixer_destroy,
+	[VDP_FUNC_ID_VIDEO_MIXER_DESTROY]                                   = handle_destroy,
 	[VDP_FUNC_ID_VIDEO_MIXER_RENDER]                                    = vdp_video_mixer_render,
-	[VDP_FUNC_ID_PRESENTATION_QUEUE_TARGET_DESTROY]                     = vdp_presentation_queue_target_destroy,
+	[VDP_FUNC_ID_PRESENTATION_QUEUE_TARGET_DESTROY]                     = handle_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_CREATE]                             = vdp_presentation_queue_create,
-	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = vdp_presentation_queue_destroy,
+	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = handle_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_SET_BACKGROUND_COLOR]               = vdp_presentation_queue_set_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_BACKGROUND_COLOR]               = vdp_presentation_queue_get_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_TIME]                           = vdp_presentation_queue_get_time,
@@ -164,7 +155,7 @@ VdpStatus vdp_get_proc_address(VdpDevice device_handle,
 	if (!function_pointer)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *device = handle_get(device_handle);
+	smart device_ctx_t *device = handle_get(device_handle);
 	if (!device)
 		return VDP_STATUS_INVALID_HANDLE;
 
