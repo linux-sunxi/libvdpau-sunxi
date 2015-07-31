@@ -436,6 +436,10 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 		__disp_layer_info_t layer_info;
 		memset(&layer_info, 0, sizeof(layer_info));
+
+		uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
+		ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args);
+
 		layer_info.pipe = 1;
 		layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
 		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
@@ -464,7 +468,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		layer_info.scn_win.width = min_nz(clip_width, os->rgba.dirty.x1) - os->rgba.dirty.x0;
 		layer_info.scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
 
-		uint32_t args[4] = { 0, q->target->layer_top, (unsigned long)(&layer_info), 0 };
+		args[2] = (unsigned long)(&layer_info);
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
 		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
