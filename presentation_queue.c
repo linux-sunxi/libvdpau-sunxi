@@ -583,7 +583,13 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	qt->drawable_height = 0;
 
 	qt->drawable = drawable;
+
+	/* Register drawable and parent window for events */
+	Window root, parent, *children;
+	uint32_t nchildren;
+	XQueryTree(dev->display, drawable, &root, &parent, &children, &nchildren);
 	XSelectInput(dev->display, drawable, StructureNotifyMask);
+	XSelectInput(dev->display, parent, StructureNotifyMask);
 
 	/* get current window position */
 	Window dummy;
