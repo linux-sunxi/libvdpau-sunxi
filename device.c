@@ -52,11 +52,16 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 		return VDP_STATUS_ERROR;
 
 	char *env_vdpau_osd = getenv("VDPAU_OSD");
-	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
+	if (env_vdpau_osd && strncmp(env_vdpau_osd, "0", 1) == 0)
+		VDPAU_DBG("OSD disabled.");
+	else
 	{
 		dev->g2d_fd = open("/dev/g2d", O_RDWR);
 		if (dev->g2d_fd != -1)
+		{
 			dev->osd_enabled = 1;
+			VDPAU_DBG("OSD enabled.");
+		}
 		else
 			VDPAU_DBG("Failed to open /dev/g2d! OSD disabled.");
 	}
