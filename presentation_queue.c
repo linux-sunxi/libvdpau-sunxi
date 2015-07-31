@@ -32,6 +32,10 @@
 #include "ve.h"
 #include "rgba.h"
 
+#ifdef DEBUG_X11
+#include "eventnames.h"
+#endif
+
 static pthread_t presentation_thread_id;
 static QUEUE *Queue;
 static VdpTime frame_time;
@@ -146,12 +150,18 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	 * FIXME: not correct position if no surface is in queue
 	 */
 	int i = 0;
-
+	
+#ifdef DEBUG_X11
+	VDPAU_DBG("QueueLength: %d", XEventsQueued(q->device->display, QueuedAlready));
+#endif
 	while (XPending(q->device->display) && i++<20)
 	{
 		XEvent ev;
 		XNextEvent(q->device->display, &ev);
-
+		
+#ifdef DEBUG_X11
+		VDPAU_DBG("Received the following XEvent: %s", event_names[ev.type]);
+#endif
 		switch(ev.type) {
 		/*
 		 * Window was unmapped.
@@ -161,6 +171,9 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 1;
 			q->target->start_flag = 0;
+#ifdef DEBUG_X11
+			VDPAU_DBG("Processing UnmapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
+#endif
 			break;
 		/*
 		 * Window was mapped.
@@ -170,6 +183,9 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 0;
 			q->target->start_flag = 1;
+#ifdef DEBUG_X11
+			VDPAU_DBG("Processing MapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
+#endif
 			break;
 		/*
 		 * Window dimension or position has changed.
@@ -187,8 +203,14 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 				q->target->drawable_height = ev.xconfigure.height;
 				q->target->drawable_change = 1;
 			}
+#ifdef DEBUG_X11
+			VDPAU_DBG("Processing ConfigureNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
+#endif
 			break;
 		default:
+#ifdef DEBUG_X11
+			VDPAU_DBG("Skipping XEvent (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
+#endif
 			break;
 		}
 	}

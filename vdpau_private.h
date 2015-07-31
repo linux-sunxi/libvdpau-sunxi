@@ -21,6 +21,7 @@
 #define __VDPAU_PRIVATE_H__
 
 #define DEBUG
+#define DEBUG_X11
 #define MAX_HANDLES 64
 #define VBV_SIZE (1 * 1024 * 1024)
 
