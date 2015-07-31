@@ -66,6 +66,15 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 			VDPAU_DBG("Failed to open /dev/g2d! OSD disabled.");
 	}
 
+	char *env_vdpau_deint = getenv("VDPAU_DEINT");
+	if (env_vdpau_deint && strncmp(env_vdpau_deint, "0", 1) == 0)
+		VDPAU_DBG("Deinterlacer disabled.");
+	else
+	{
+		dev->deint_enabled = 1;
+		VDPAU_DBG("Deinterlacer enabled.");
+	}
+
 	*get_proc_address = vdp_get_proc_address;
 
 	return handle_create(device, dev);

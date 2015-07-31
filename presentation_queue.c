@@ -72,6 +72,7 @@ static void cleanup_presentation_queue_target(void *ptr, void *meta)
 
 	if (target->layer)
 	{
+		ioctl(target->fd, DISP_CMD_VIDEO_STOP, args);
 		ioctl(target->fd, DISP_CMD_LAYER_CLOSE, args);
 		ioctl(target->fd, DISP_CMD_LAYER_RELEASE, args);
 	}
@@ -136,66 +137,122 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 	if (os->vs)
 	{
-		// VIDEO layer
-		__disp_layer_info_t layer_info;
-		memset(&layer_info, 0, sizeof(layer_info));
-		layer_info.pipe = q->device->osd_enabled ? 0 : 1;
-		layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
-		layer_info.fb.format = DISP_FORMAT_YUV420;
-		layer_info.fb.seq = DISP_SEQ_UVUV;
-		switch (os->vs->source_format) {
-		case VDP_YCBCR_FORMAT_YUYV:
-			layer_info.fb.mode = DISP_MOD_INTERLEAVED;
-			layer_info.fb.format = DISP_FORMAT_YUV422;
-			layer_info.fb.seq = DISP_SEQ_YUYV;
-			break;
-		case VDP_YCBCR_FORMAT_UYVY:
-			layer_info.fb.mode = DISP_MOD_INTERLEAVED;
-			layer_info.fb.format = DISP_FORMAT_YUV422;
-			layer_info.fb.seq = DISP_SEQ_UYVY;
-			break;
-		case VDP_YCBCR_FORMAT_NV12:
-			layer_info.fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
-			break;
-		case VDP_YCBCR_FORMAT_YV12:
-			layer_info.fb.mode = DISP_MOD_NON_MB_PLANAR;
-			break;
-		default:
-		case INTERNAL_YCBCR_FORMAT:
-			layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
-			break;
-		}
-		layer_info.fb.br_swap = 0;
-		layer_info.fb.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
-		layer_info.fb.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
-		layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
+		static int last_id;
+		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 
-		layer_info.fb.cs_mode = DISP_BT601;
-		layer_info.fb.size.width = os->vs->width;
-		layer_info.fb.size.height = os->vs->height;
-		layer_info.src_win.x = os->video_src_rect.x0;
-		layer_info.src_win.y = os->video_src_rect.y0;
-		layer_info.src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
-		layer_info.src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
-		layer_info.scn_win.x = x + os->video_dst_rect.x0;
-		layer_info.scn_win.y = y + os->video_dst_rect.y0;
-		layer_info.scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
-		layer_info.scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
-		layer_info.ck_enable = q->device->osd_enabled ? 0 : 1;
-
-		if (layer_info.scn_win.y < 0)
+		if (os->vs->start_flag == 1)
 		{
-			int cutoff = -(layer_info.scn_win.y);
-			layer_info.src_win.y += cutoff;
-			layer_info.src_win.height -= cutoff;
-			layer_info.scn_win.y = 0;
-			layer_info.scn_win.height -= cutoff;
+			last_id = -1; // reset the video.id
+
+			// VIDEO layer
+			__disp_layer_info_t layer_info;
+			memset(&layer_info, 0, sizeof(layer_info));
+
+			args[2] = (unsigned long)(&layer_info);
+			ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args);
+
+			layer_info.pipe = q->device->osd_enabled ? 0 : 1;
+			layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
+			layer_info.fb.format = DISP_FORMAT_YUV420;
+			layer_info.fb.seq = DISP_SEQ_UVUV;
+			switch (os->vs->source_format) {
+			case VDP_YCBCR_FORMAT_YUYV:
+				layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+				layer_info.fb.format = DISP_FORMAT_YUV422;
+				layer_info.fb.seq = DISP_SEQ_YUYV;
+				break;
+			case VDP_YCBCR_FORMAT_UYVY:
+				layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+				layer_info.fb.format = DISP_FORMAT_YUV422;
+				layer_info.fb.seq = DISP_SEQ_UYVY;
+				break;
+			case VDP_YCBCR_FORMAT_NV12:
+				layer_info.fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
+				break;
+			case VDP_YCBCR_FORMAT_YV12:
+				layer_info.fb.mode = DISP_MOD_NON_MB_PLANAR;
+				break;
+			default:
+			case INTERNAL_YCBCR_FORMAT:
+				layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
+				break;
+			}
+
+			layer_info.fb.br_swap = 0;
+			if (os->vs->height < 720)
+				layer_info.fb.cs_mode = DISP_BT601;
+			else
+				layer_info.fb.cs_mode = DISP_BT709;
+			layer_info.fb.size.width = os->vs->width;
+			layer_info.fb.size.height = os->vs->height;
+			layer_info.src_win.x = os->video_src_rect.x0;
+			layer_info.src_win.y = os->video_src_rect.y0;
+			layer_info.src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
+			layer_info.src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
+			layer_info.scn_win.x = x + os->video_dst_rect.x0;
+			layer_info.scn_win.y = y + os->video_dst_rect.y0;
+			layer_info.scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
+			layer_info.scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
+			layer_info.ck_enable = q->device->osd_enabled ? 0 : 1;
+
+			if (layer_info.scn_win.y < 0)
+			{
+				int cutoff = -(layer_info.scn_win.y);
+				layer_info.src_win.y += cutoff;
+				layer_info.src_win.height -= cutoff;
+				layer_info.scn_win.y = 0;
+				layer_info.scn_win.height -= cutoff;
+			}
+
+			layer_info.fb.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
+			layer_info.fb.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
+			layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
+
+			args[2] = (unsigned long)(&layer_info);
+			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
+
+			args[2] = 0;
+			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
+
+			os->vs->start_flag = 0; // initial run is done, only set video.addr[] in the next runs
+		}
+		else
+		{
+			__disp_video_fb_t video;
+			memset(&video, 0, sizeof(__disp_video_fb_t));
+			video.id = last_id + 1;
+			video.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
+			video.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
+			video.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
+
+			if (q->device->deint_enabled)
+			{
+				video.interlace = os->video_deinterlace;
+				video.top_field_first = os->video_field ? 0 : 1;
+			}
+
+			args[2] = (unsigned long)(&video);
+			int tmp, i = 0;
+			while ((tmp = ioctl(q->target->fd, DISP_CMD_VIDEO_GET_FRAME_ID, args)) != last_id)
+			{
+				if (tmp == -1)
+					break;
+				VDPAU_DBG("Waiting for frame id ... tmp=%d, last_id=%d", tmp, last_id);
+
+				usleep(1000);
+				if (i++ > 10)
+				{
+					VDPAU_DBG("Waiting for frame id failed");
+					break;
+				}
+			}
+
+			ioctl(q->target->fd, DISP_CMD_VIDEO_SET_FB, args);
+
+			last_id++;
 		}
 
-		uint32_t args[4] = { 0, q->target->layer, (unsigned long)(&layer_info), 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
-
-		ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 		// Note: might be more reliable (but slower and problematic when there
 		// are driver issues and the GET functions return wrong values) to query the
 		// old values instead of relying on our internal csc_change.

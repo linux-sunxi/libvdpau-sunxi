@@ -33,6 +33,10 @@ To disable OSD support for e.g. subtitles, set VDPAU_OSD environment
 variable to 0 (OSD is enabled by default):
    $ export VDPAU_OSD=0
 
+To disable deinterlacer support, set VDPAU_DEINT environment
+variable to 0 (Deinterlacer is enabled by default):
+   $ export VDPAU_DEINT=0
+
 This partly breaks X11 integration due to hardware limitations. The video
 area can't be overlapped by other windows. For fullscreen use this is no
 problem.

@@ -48,6 +48,22 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 	mix->device = sref(dev);
 	mix->contrast = 1.0;
 	mix->saturation = 1.0;
+	mix->start_stream = 1;
+
+	int i;
+
+	if (mix->device->deint_enabled)
+	{
+		for (i = 0; i < feature_count; i++)
+		{
+			switch (features[i])
+			{
+			case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
+				mix->deinterlace = 1;
+				break;
+			}
+		}
+	}
 
 	return handle_create(mixer, mix);
 }
@@ -75,12 +91,6 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	if (background_surface != VDP_INVALID_HANDLE)
 		VDPAU_DBG_ONCE("Requested unimplemented background_surface");
 
-
-	if (current_picture_structure != VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME)
-		VDPAU_DBG_ONCE("Requested unimplemented picture_structure");
-
-
-
 	smart output_surface_ctx_t *os = handle_get(destination_surface);
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
@@ -94,6 +104,12 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 		return VDP_STATUS_INVALID_HANDLE;
 
 	os->yuv = yuv_ref(os->vs->yuv);
+
+	if (mix->device->deint_enabled)
+	{
+		os->video_deinterlace = (current_picture_structure == VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME ? 0 : 1);
+		os->video_field = current_picture_structure;
+	}
 
 	if (video_source_rect)
 	{
@@ -121,6 +137,8 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	os->contrast = mix->contrast;
 	os->saturation = mix->saturation;
 	os->hue = mix->hue;
+	os->vs->start_flag = mix->start_stream;
+	mix->start_stream = 0;
 	mix->csc_change = 0;
 
 	if (mix->device->osd_enabled && (os->rgba.flags & RGBA_FLAG_DIRTY))
@@ -128,7 +146,6 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 
 	if (layer_count != 0)
 		VDPAU_DBG_ONCE("Requested unimplemented additional layers");
-
 
 	return VDP_STATUS_OK;
 }
@@ -148,7 +165,6 @@ VdpStatus vdp_video_mixer_get_feature_support(VdpVideoMixer mixer,
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
-
 	return VDP_STATUS_ERROR;
 }
 
@@ -167,6 +183,20 @@ VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer,
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	int i;
+
+	if (mix->device->deint_enabled)
+	{
+		for (i = 0; i < feature_count; i++)
+		{
+			switch (features[i])
+			{
+			case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
+				mix->deinterlace = feature_enables[i];
+				break;
+			}
+		}
+	}
 
 	return VDP_STATUS_OK;
 }
@@ -183,8 +213,22 @@ VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer,
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	int i;
 
-	return VDP_STATUS_ERROR;
+	if (mix->device->deint_enabled)
+	{
+		for (i = 0; i < feature_count; i++)
+		{
+			switch (features[i])
+			{
+			case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
+				feature_enables[i] = mix->deinterlace;
+				break;
+			}
+		}
+	}
+
+	return VDP_STATUS_OK;
 }
 
 static void set_csc_matrix(mixer_ctx_t *mix, const VdpCSCMatrix *matrix)
@@ -239,7 +283,6 @@ VdpStatus vdp_video_mixer_get_parameter_values(VdpVideoMixer mixer,
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
-
 	return VDP_STATUS_ERROR;
 }
 
@@ -270,7 +313,15 @@ VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	*is_supported = VDP_FALSE;
+	switch (feature)
+	{
+	case VDP_VIDEO_MIXER_FEATURE_DEINTERLACE_TEMPORAL:
+		*is_supported = VDP_TRUE;
+		break;
+	default:
+		*is_supported = VDP_FALSE;
+	}
+
 	return VDP_STATUS_OK;
 }
 
