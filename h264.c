@@ -810,8 +810,8 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 		if (h->nal_unit_type != 5 && h->nal_unit_type != 1)
 		{
-			free(c);
 			ve_put();
+			free(c);
 			return VDP_STATUS_ERROR;
 		}
 
