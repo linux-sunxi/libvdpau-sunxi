@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include "vdpau_private.h"
 #include "ve.h"
 
 #define DEVICE "/dev/cedar_dev"
@@ -115,7 +116,7 @@ int ve_open(void)
 	writel(0x00130007, ve.regs + VE_CTRL);
 
 	ve.version = readl(ve.regs + VE_VERSION) >> 16;
-	printf("[VDPAU SUNXI] VE version 0x%04x opened.\n", ve.version);
+	VDPAU_LOG(LINFO, "VE version 0x%04x opened.\n", ve.version);
 
 	return 1;
 

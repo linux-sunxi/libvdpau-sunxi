@@ -109,13 +109,13 @@ static int decode_vop_header(bitstream *bs, VdpPictureInfoMPEG4Part2 const *info
 	while (get_bits(bs, 1) != 0);
 
 	if (get_bits(bs, 1) != 1)
-		VDPAU_DBG("vop header marker error");
+		VDPAU_LOG(LWARN, "vop header marker error");
 
 	/* vop_time_increment */
 	get_bits(bs, 32 - __builtin_clz(info->vop_time_increment_resolution));
 
 	if (get_bits(bs, 1) != 1)
-		VDPAU_DBG("vop header marker error");
+		VDPAU_LOG(LWARN, "vop header marker error");
 
 	/* vop_coded */
 	if (!get_bits(bs, 1))
@@ -151,7 +151,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 
 	if (!info->resync_marker_disable)
 	{
-		VDPAU_DBG("We can't decode VOPs with resync markers yet! Sorry");
+		VDPAU_LOG(LERR, "We can't decode VOPs with resync markers yet! Sorry");
 		return VDP_STATUS_ERROR;
 	}
 

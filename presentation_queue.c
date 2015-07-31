@@ -27,14 +27,11 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include "eventnames.h"
 #include "queue.h"
 #include "sunxi_disp_ioctl.h"
 #include "ve.h"
 #include "rgba.h"
-
-#ifdef DEBUG_X11
-#include "eventnames.h"
-#endif
 
 static pthread_t presentation_thread_id;
 static QUEUE *Queue;
@@ -127,7 +124,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 
 	if(q_push_tail(Queue, task))
 	{
-		VDPAU_DBG("Error inserting task");
+		VDPAU_LOG(LWARN, "Error inserting task");
 		sfree(task->surface);
 		sfree(task->queue);
 		free(task);
@@ -150,18 +147,17 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	 * FIXME: not correct position if no surface is in queue
 	 */
 	int i = 0;
-	
-#ifdef DEBUG_X11
-	VDPAU_DBG("QueueLength: %d", XEventsQueued(q->device->display, QueuedAlready));
-#endif
+
+	VDPAU_LOG(LDBG, "QueueLength: %d", XEventsQueued(q->device->display, QueuedAlready));
+
 	while (XPending(q->device->display) && i++<20)
 	{
 		XEvent ev;
 		XNextEvent(q->device->display, &ev);
 		
-#ifdef DEBUG_X11
-		VDPAU_DBG("Received the following XEvent: %s", event_names[ev.type]);
-#endif
+
+		VDPAU_LOG(LDBG, "Received the following XEvent: %s", event_names[ev.type]);
+
 		switch(ev.type) {
 		/*
 		 * Window was unmapped.
@@ -171,9 +167,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 1;
 			q->target->start_flag = 0;
-#ifdef DEBUG_X11
-			VDPAU_DBG("Processing UnmapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
-#endif
+			VDPAU_LOG(LINFO, "Processing UnmapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		/*
 		 * Window was mapped.
@@ -183,9 +177,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 0;
 			q->target->start_flag = 1;
-#ifdef DEBUG_X11
-			VDPAU_DBG("Processing MapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
-#endif
+			VDPAU_LOG(LINFO, "Processing MapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		/*
 		 * Window dimension or position has changed.
@@ -203,14 +195,10 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 				q->target->drawable_height = ev.xconfigure.height;
 				q->target->drawable_change = 1;
 			}
-#ifdef DEBUG_X11
-			VDPAU_DBG("Processing ConfigureNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
-#endif
+			VDPAU_LOG(LINFO, "Processing ConfigureNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		default:
-#ifdef DEBUG_X11
-			VDPAU_DBG("Skipping XEvent (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
-#endif
+			VDPAU_LOG(LINFO, "Skipping XEvent (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		}
 	}
@@ -380,12 +368,12 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			{
 				if (tmp == -1)
 					break;
-				VDPAU_DBG("Waiting for frame id ... tmp=%d, last_id=%d", tmp, last_id);
+				VDPAU_LOG(LINFO, "Waiting for frame id ... tmp=%d, last_id=%d", tmp, last_id);
 
 				usleep(1000);
 				if (i++ > 10)
 				{
-					VDPAU_DBG("Waiting for frame id failed");
+					VDPAU_LOG(LWARN, "Waiting for frame id failed");
 					break;
 				}
 			}
@@ -431,8 +419,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
 
-			VDPAU_DBG("Presentation queue csc change");
-			VDPAU_DBG("display driver -> bright: %d, contrast: %d, saturation: %d, hue: %d", b, c, s, h);
+			VDPAU_LOG(LINFO, "Presentation queue csc change");
+			VDPAU_LOG(LINFO, "display driver -> bright: %d, contrast: %d, saturation: %d, hue: %d", b, c, s, h);
 			os->csc_change = 0;
 		}
 	}
@@ -507,8 +495,9 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-	queue_ctx_t *q = (queue_ctx_t *)param;
+	smart queue_ctx_t *q = (queue_ctx_t *)param;
 
+	output_surface_ctx_t *os_cur = NULL;
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_pprev = NULL;
 
@@ -520,7 +509,7 @@ static void *presentation_thread(void *param)
 			{
 				/* do the VSync, if enabled */
 				if (wait_for_vsync(q->device))
-					VDPAU_DBG("VSync failed");
+					VDPAU_LOG(LWARN, "VSync failed");
 				frame_time = get_time();
 
 				/* Rotate the surfaces and set the status flags */
@@ -532,17 +521,21 @@ static void *presentation_thread(void *param)
 				if (os_pprev) /* This is the previously displayed surface */
 					os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 
+				sfree(os_pprev);
+				os_pprev = os_prev;
+				sfree(os_prev);
+				os_prev = os_cur;
+				os_cur = sref(task->surface);
+
 				/* display the task */
 				do_presentation_queue_display(task);
 
-				output_surface_ctx_t *os_cur = handle_get(task->surface);
-				os_pprev = os_prev;
-				os_prev = os_cur;
-
+				sfree(task->surface);
+				sfree(task->queue);
 				free(task);
 			}
 			else /* This should never happen! */
-				VDPAU_DBG("Error getting task");
+				VDPAU_LOG(LERR, "Error getting task");
 		}
 		/* We have no surface in the queue, so simply wait some period of time (find a suitable value!)
 		 * Otherwise, while is doing a race, that it can't win.

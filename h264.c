@@ -259,7 +259,7 @@ static void ref_pic_list_modification(h264_context_t *c)
 				}
 				else if (modification_of_pic_nums_idc == 2)
 				{
-					VDPAU_DBG("NOT IMPLEMENTED: modification_of_pic_nums_idc == 2");
+					VDPAU_LOG(LINFO, "NOT IMPLEMENTED: modification_of_pic_nums_idc == 2");
 					unsigned int long_term_pic_num = get_ue(c->regs);
 				}
 			} while (modification_of_pic_nums_idc != 3);
@@ -271,7 +271,7 @@ static void ref_pic_list_modification(h264_context_t *c)
 		int ref_pic_list_modification_flag_l1 = get_u(c->regs, 1);
 		if (ref_pic_list_modification_flag_l1)
 		{
-			VDPAU_DBG("NOT IMPLEMENTED: ref_pic_list_modification_flag_l1 == 1");
+			VDPAU_LOG(LINFO, "NOT IMPLEMENTED: ref_pic_list_modification_flag_l1 == 1");
 			unsigned int modification_of_pic_nums_idc;
 			do
 			{
@@ -647,7 +647,7 @@ static void fill_frame_lists(h264_context_t *c)
 		if (rf->surface != VDP_INVALID_HANDLE)
 		{
 			if (rf->is_long_term)
-				VDPAU_DBG("NOT IMPLEMENTED: We got a longterm reference!");
+				VDPAU_LOG(LINFO, "NOT IMPLEMENTED: We got a longterm reference!");
 
 			smart video_surface_ctx_t *surface = handle_get(rf->surface);
 			h264_video_private_t *surface_p = get_surface_priv(c, surface);

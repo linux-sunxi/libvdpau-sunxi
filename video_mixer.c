@@ -105,7 +105,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 		return VDP_STATUS_INVALID_HANDLE;
 
 	if (background_surface != VDP_INVALID_HANDLE)
-		VDPAU_DBG_ONCE("Requested unimplemented background_surface");
+		VDPAU_LOG(LINFO, "Requested unimplemented background_surface");
 
 	smart output_surface_ctx_t *os = handle_get(destination_surface);
 	if (!os)
@@ -161,7 +161,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 		os->rgba.flags |= RGBA_FLAG_NEEDS_CLEAR;
 
 	if (layer_count != 0)
-		VDPAU_DBG_ONCE("Requested unimplemented additional layers");
+		VDPAU_LOG(LINFO, "Requested unimplemented additional layers");
 
 	return VDP_STATUS_OK;
 }
@@ -318,8 +318,8 @@ void set_csc_matrix(mixer_ctx_t *mix, VdpColorStandard standard)
 		                  (*cstd)[1][3] - (*cstd)[1][0] * mix->contrast * ybias) / (*cstd)[1][0];
 	}
 
-	VDPAU_DBG("Setting mixer value from following color standard: %d", standard);
-	VDPAU_DBG(">mix->bright: %2.3f, mix->contrast: %2.3f, mix->saturation: %2.3f, mix->hue: %2.3f",
+	VDPAU_LOG(LINFO, "Setting mixer value from following color standard: %d", standard);
+	VDPAU_LOG(LINFO, ">mix->bright: %2.3f, mix->contrast: %2.3f, mix->saturation: %2.3f, mix->hue: %2.3f",
 	          (double)mix->brightness, (double)mix->contrast,
 	          (double)mix->saturation, (double)mix->hue);
 }
@@ -588,8 +588,8 @@ VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp,
 		                      (*cstd)[i][2] * (c * crbias * s * cosf(h) - c * cbbias * s * sinf(h));
 	}
 
-	VDPAU_DBG("Generate CSC matrix from following color standard: %d", standard);
-	VDPAU_DBG(">procamp->bright: %2.3f, procamp->contrast: %2.3f, procamp->saturation: %2.3f, procamp->hue: %2.3f",
+	VDPAU_LOG(LINFO, "Generate CSC matrix from following color standard: %d", standard);
+	VDPAU_LOG(LINFO, ">procamp->bright: %2.3f, procamp->contrast: %2.3f, procamp->saturation: %2.3f, procamp->hue: %2.3f",
 	          (double)b, (double)c, (double)s, (double)h);
 
 	return VDP_STATUS_OK;
