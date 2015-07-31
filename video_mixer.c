@@ -18,9 +18,17 @@
  */
 
 #include <math.h>
+#include <string.h>
 #include "vdpau_private.h"
 #include "ve.h"
 #include "rgba.h"
+#include "csc.h"
+
+/*
+ * Make a global variable, that inherits the actual color standard.
+ * This is written within vdp_generate_csc_matrix and read in set_csc_matrix.
+ */
+static VdpColorStandard color_standard;
 
 static void cleanup_video_mixer(void *ptr, void *meta)
 {
@@ -46,9 +54,17 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 		return VDP_STATUS_RESOURCES;
 
 	mix->device = sref(dev);
+	mix->brightness = 0.0;
 	mix->contrast = 1.0;
 	mix->saturation = 1.0;
+	mix->hue = 0.0;
 	mix->start_stream = 1;
+
+	/* CSC: Use BT601 at initalization time */
+	mix->custom_csc = 0;
+	color_standard = VDP_COLOR_STANDARD_ITUR_BT_601;
+	vdp_generate_csc_matrix(NULL, color_standard, &mix->csc_matrix);
+	set_csc_matrix(mix, color_standard);
 
 	int i;
 
@@ -231,24 +247,81 @@ VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer,
 	return VDP_STATUS_OK;
 }
 
-static void set_csc_matrix(mixer_ctx_t *mix, const VdpCSCMatrix *matrix)
+void set_csc_matrix(mixer_ctx_t *mix, VdpColorStandard standard)
 {
-	mix->csc_change = 1;
-	// default contrast for full-range has 1.0 as luma coefficients
-	mix->contrast = ((*matrix)[0][0] + (*matrix)[1][0] + (*matrix)[2][0]) / 3;
-	// the way brightness and contrast work with this driver, brightness
-	// is the brightness of a "black" pixel
-	mix->brightness = ((*matrix)[0][1] + (*matrix)[1][1] + (*matrix)[2][1]) / 2 +
-	                  ((*matrix)[0][2] + (*matrix)[1][2] + (*matrix)[2][2]) / 2 +
-	                  (*matrix)[0][3] + (*matrix)[1][3] + (*matrix)[2][3];
-	mix->brightness /= 3;
+	float asin;
+	static const csc_m *cstd;
 
-	float sin = (*matrix)[0][1] + (*matrix)[2][2];
-	float cos = (*matrix)[0][2] + (*matrix)[2][1];
-	float e = 0.001;
-	if (-e < cos && cos < e) mix->hue = M_PI;
-	else mix->hue = atanf(sin/cos);
-	mix->saturation = sqrtf(sin * sin + cos * cos) / (1.403 + 1.773);
+	mix->csc_change = 1;
+	switch (standard) {
+		case VDP_COLOR_STANDARD_ITUR_BT_709:
+			cstd = &cs_bt709;
+			break;
+		case VDP_COLOR_STANDARD_SMPTE_240M:
+			cstd = &cs_smpte_240m;
+			break;
+		case VDP_COLOR_STANDARD_ITUR_BT_601:
+		default:
+			cstd = &cs_bt601;
+			break;
+	}
+	VdpCSCMatrix *matrix = &mix->csc_matrix;
+
+	if ((*matrix)[1][0] == 0 && (*matrix)[1][1] == 0 && (*matrix)[1][2] == 0)
+	{
+		/* At least contrast was 0.0f. Set Hue and saturation to default. They cannot be guessed... */
+		mix->contrast = 0.0f;
+		mix->hue = 0.0f;
+		mix->saturation = 1.0f;
+	}
+	else
+	{
+		/* Contrast */
+		mix->contrast = (*matrix)[0][0] / (*cstd)[0][0];
+
+		if ((*matrix)[1][1] == 0 && (*matrix)[1][2] == 0)
+		{
+			/* Saturation was 0.0f. Set Hue to default. This cannot be guessed... */
+			mix->hue = 0.0f;
+			mix->saturation = 0.0f;
+		}
+		else
+		{
+			/* Hue */
+			asin = asinf(sqrtf(pow(((*matrix)[1][1] * (*cstd)[1][2] - (*matrix)[1][2] * (*cstd)[1][1]), 2.0) /
+			       (pow((-(*matrix)[1][1] * (*cstd)[1][1] - (*matrix)[1][2] * (*cstd)[1][2]), 2.0) +
+			        pow(((*matrix)[1][1] * (*cstd)[1][2] - (*matrix)[1][2] * (*cstd)[1][1]), 2.0))));
+
+			if (((*matrix)[2][1] < 0 && (*cstd)[2][1] < 0) || ((*matrix)[2][1] > 0 && (*cstd)[2][1] > 0))
+				if (((*matrix)[0][1] < 0 && (*matrix)[0][2] > 0) || ((*matrix)[0][1] > 0 && (*matrix)[0][2] < 0))
+					mix->hue = asin;
+				else
+					mix->hue = - asin;
+			else
+				if (((*matrix)[0][1] < 0 && (*matrix)[0][2] > 0) || ((*matrix)[0][1] > 0 && (*matrix)[0][2] < 0))
+					mix->hue = - M_PI + asin;
+				else
+					mix->hue = M_PI - asin;
+
+			/* Check, if Hue was M_PI or -M_PI */
+			if ((fabs(fabs(mix->hue) - M_PI)) < 0.00001f)
+				mix->hue = - mix->hue;
+
+			/* Saturation */
+			mix->saturation = (*matrix)[1][1] / (mix->contrast * ((*cstd)[1][1] * cosf(mix->hue) - (*cstd)[1][2] * sinf(mix->hue)));
+		}
+
+		/* Brightness */
+		mix->brightness = ((*matrix)[1][3] -
+		                  (*cstd)[1][1] * mix->contrast * mix->saturation * (cbbias * cosf(mix->hue) + crbias * sinf(mix->hue)) -
+		                  (*cstd)[1][2] * mix->contrast * mix->saturation * (crbias * cosf(mix->hue) - cbbias * sinf(mix->hue)) -
+		                  (*cstd)[1][3] - (*cstd)[1][0] * mix->contrast * ybias) / (*cstd)[1][0];
+	}
+
+	VDPAU_DBG("Setting mixer value from following color standard: %d", standard);
+	VDPAU_DBG(">mix->bright: %2.3f, mix->contrast: %2.3f, mix->saturation: %2.3f, mix->hue: %2.3f",
+	          (double)mix->brightness, (double)mix->contrast,
+	          (double)mix->saturation, (double)mix->hue);
 }
 
 VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
@@ -264,9 +337,24 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
 		return VDP_STATUS_INVALID_HANDLE;
 
 	uint32_t i;
-	for (i = 0; i < attribute_count; i++)
-		if (attributes[i] == VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX)
-			set_csc_matrix(mix, (const VdpCSCMatrix *)attribute_values[i]);
+	for (i = 0; i < attribute_count; i++) {
+		switch (attributes[i]) {
+			case VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX:
+				mix->custom_csc = !!attribute_values[i];
+				if (!attribute_values[i])
+				{
+					/* CSC: Use BT601 if not set */
+					color_standard = VDP_COLOR_STANDARD_ITUR_BT_601;
+					vdp_generate_csc_matrix(NULL, color_standard, &mix->csc_matrix);
+				}
+				else
+					memcpy(mix->csc_matrix, attribute_values[i], sizeof(mix->csc_matrix));
+				set_csc_matrix(mix, color_standard);
+				break;
+			default:
+				return VDP_STATUS_INVALID_VIDEO_MIXER_ATTRIBUTE;
+		}
+	}
 
 	return VDP_STATUS_OK;
 }
@@ -291,6 +379,9 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
                                                VdpVideoMixerAttribute const *attributes,
                                                void *const *attribute_values)
 {
+	int i;
+	VdpCSCMatrix **vdp_csc;
+	
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
 
@@ -298,8 +389,29 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
 	if (!mix)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	for (i = 0; i < attribute_count; i++) {
+		switch (attributes[i])
+		{
+			case VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX:
+				vdp_csc = attribute_values[i];
+				if (!mix->custom_csc)
+					*vdp_csc = NULL;
+				else
+					memcpy(*vdp_csc, mix->csc_matrix, sizeof(VdpCSCMatrix));
+				break;
+			case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
+			case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
+			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
+			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
+			case VDP_VIDEO_MIXER_ATTRIBUTE_SHARPNESS_LEVEL:
+			case VDP_VIDEO_MIXER_ATTRIBUTE_SKIP_CHROMA_DEINTERLACE:
+				break;
+			default:
+				return VDP_STATUS_INVALID_VIDEO_MIXER_ATTRIBUTE;
+		}
+	}
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_OK;
 }
 
 VdpStatus vdp_video_mixer_query_feature_support(VdpDevice device,
@@ -439,35 +551,46 @@ VdpStatus vdp_generate_csc_matrix(VdpProcamp *procamp,
                                   VdpColorStandard standard,
                                   VdpCSCMatrix *csc_matrix)
 {
-	if (!csc_matrix || !procamp)
+	if (!csc_matrix)
 		return VDP_STATUS_INVALID_POINTER;
 
-	if (procamp->struct_version > VDP_PROCAMP_VERSION)
+	if (procamp && procamp->struct_version > VDP_PROCAMP_VERSION)
 		return VDP_STATUS_INVALID_STRUCT_VERSION;
 
-	// BT.601 table
-	(*csc_matrix)[0][1] =  0.000;
-	(*csc_matrix)[0][2] =  1.403;
+	static const csc_m *cstd;
+	color_standard = standard;
 
-	(*csc_matrix)[1][1] = -0.344;
-	(*csc_matrix)[1][2] = -0.714;
+	switch (standard) {
+		case VDP_COLOR_STANDARD_ITUR_BT_709:
+			cstd = &cs_bt709;
+			break;
+		case VDP_COLOR_STANDARD_SMPTE_240M:
+			cstd = &cs_smpte_240m;
+			break;
+		case VDP_COLOR_STANDARD_ITUR_BT_601:
+		default:
+			cstd = &cs_bt601;
+			break;
+	}
 
-	(*csc_matrix)[2][1] =  1.773;
-	(*csc_matrix)[2][2] =  0.000;
+	float b = procamp ? procamp->brightness : 0.0f;
+	float c = procamp ? procamp->contrast : 1.0f;
+	float s = procamp ? procamp->saturation : 1.0f;
+	float h = procamp ? procamp->hue : 0.0f;
 
-	float uvcos = procamp->saturation * cosf(procamp->hue);
-	float uvsin = procamp->saturation * sinf(procamp->hue);
 	int i;
 	for (i = 0; i < 3; i++) {
-		(*csc_matrix)[i][0] = procamp->contrast;
-		float u = (*csc_matrix)[i][1] * uvcos + (*csc_matrix)[i][2] * uvsin;
-		float v = (*csc_matrix)[i][1] * uvsin + (*csc_matrix)[i][2] * uvcos;
-		(*csc_matrix)[i][1] = u;
-		(*csc_matrix)[i][2] = v;
-		(*csc_matrix)[i][3] = - (u + v) / 2;
-		(*csc_matrix)[i][3] += 0.5 - procamp->contrast / 2;
-		(*csc_matrix)[i][3] += procamp->brightness;
+		(*csc_matrix)[i][0] = c * (*cstd)[i][0];
+		(*csc_matrix)[i][1] = c * (*cstd)[i][1] * s * cosf(h) - c * (*cstd)[i][2] * s * sinf(h);
+		(*csc_matrix)[i][2] = c * (*cstd)[i][2] * s * cosf(h) + c * (*cstd)[i][1] * s * sinf(h);
+		(*csc_matrix)[i][3] = (*cstd)[i][3] + (*cstd)[i][0] * (b + c * ybias) +
+		                      (*cstd)[i][1] * (c * cbbias * s * cosf(h) + c * crbias * s * sinf(h)) +
+		                      (*cstd)[i][2] * (c * crbias * s * cosf(h) - c * cbbias * s * sinf(h));
 	}
+
+	VDPAU_DBG("Generate CSC matrix from following color standard: %d", standard);
+	VDPAU_DBG(">procamp->bright: %2.3f, procamp->contrast: %2.3f, procamp->saturation: %2.3f, procamp->hue: %2.3f",
+	          (double)b, (double)c, (double)s, (double)h);
 
 	return VDP_STATUS_OK;
 }

@@ -24,6 +24,12 @@
 #define MAX_HANDLES 64
 #define VBV_SIZE (1 * 1024 * 1024)
 
+/*
+ * Set this to 1 if you want csc conversion to the full range 0~255 (TV use)
+ * If set to 0, csc conversion will use the range 16~235 (PC use)
+ */
+#define CSC_FULL_RANGE 1
+
 #include <stdlib.h>
 #include <csptr/smart_ptr.h>
 #include <vdpau/vdpau.h>
@@ -107,6 +113,8 @@ typedef struct
 	float hue;
 	int deinterlace;
 	int start_stream;
+	int custom_csc;
+	VdpCSCMatrix csc_matrix;
 } mixer_ctx_t;
 
 #define RGBA_FLAG_DIRTY (1 << 0)
@@ -184,8 +192,10 @@ VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder);
 void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);
 VdpStatus yuv_prepare(video_surface_ctx_t *video_surface);
+void set_csc_matrix(mixer_ctx_t *mix, VdpColorStandard standard);
 
 typedef uint32_t VdpHandle;
+typedef float csc_m[3][4];
 
 __attribute__((malloc)) void *handle_alloc(size_t size, f_destructor destructor);
 VdpStatus handle_create(VdpHandle *handle, void *data);

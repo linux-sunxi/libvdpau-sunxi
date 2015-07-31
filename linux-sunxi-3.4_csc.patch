@@ -1,0 +1,39 @@
+commit 75234a67ba683977e01b94745cfad2f1acd671b0
+Author: Andreas Baierl <ichgeh@imkreisrum.de>
+Date:   Fri Feb 27 08:52:39 2015 -0500
+
+    sunxi: disp: Fix bug in scaler csc
+    
+    There is some bogus code, which calculates the variable bright four times.
+    This typo is corrected.
+    
+    The code also checks for a valid input value (0-100) and calculates
+    the correct (rounded) value for bright, contrast, saturation and hue in
+    the needed range 0-63.
+    
+    Changes since v2:
+    Split min/max check.
+    
+    Changes since v1:
+    Use macro DIV_ROUND_CLOSEST for rounding.
+    Check for valid parameter values (0-100).
+
+diff --git a/drivers/video/sunxi/disp/de_fe.c b/drivers/video/sunxi/disp/de_fe.c
+index 92799a0..54dfe7f 100644
+--- a/drivers/video/sunxi/disp/de_fe.c
++++ b/drivers/video/sunxi/disp/de_fe.c
+@@ -1382,10 +1382,10 @@ __s32 DE_SCAL_Set_CSC_Coef_Enhance(__u8 sel, __u8 in_csc_mode,
+ 	__u32 i;
+ 	__s32 sinv, cosv; /* sin_tab: 7 bit fractional */
+ 
+-	bright = bright * 64 / 100;
+-	bright = saturation * 64 / 100;
+-	bright = contrast * 64 / 100;
+-	bright = hue * 64 / 100;
++	bright = DIV_ROUND_CLOSEST((clamp(bright, 0, 100) * 63), 100);
++	saturation = DIV_ROUND_CLOSEST((clamp(saturation, 0, 100) * 63), 100);
++	contrast = DIV_ROUND_CLOSEST((clamp(contrast, 0, 100) * 63), 100);
++	hue = DIV_ROUND_CLOSEST((clamp(hue, 0, 100) * 63), 100);
+ 
+ 	sinv = image_enhance_tab[8 * 12 + (hue & 0x3f)];
+ 	cosv = image_enhance_tab[8 * 12 + 8 * 8 + (hue & 0x3f)];

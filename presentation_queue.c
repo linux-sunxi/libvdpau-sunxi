@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <linux/fb.h>
 #include <pthread.h>
+#include <math.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -371,17 +372,36 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		 */
 		if (os->csc_change)
 		{
+			uint32_t b, c, s, h;
+
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
-			args[2] = 0xff * os->brightness + 0x20;
+
+			/* scale VDPAU: -1.0 ~ 1.0 to SUNXI: 0 ~ 100 */
+			b = args[2] = ((os->brightness + 1.0) * 50.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
-			args[2] = 0x20 * os->contrast;
+
+			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+			if (os->contrast <= 1.0)
+				c = args[2] = (os->contrast * 50.0) + 0.5;
+			else
+				c = args[2] = (50.0 + (os->contrast - 1.0) * 50.0 / 9.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
-			args[2] = 0x20 * os->saturation;
+
+			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+			if (os->saturation <= 1.0)
+				s = args[2] = (os->saturation * 50.0) + 0.5;
+			else
+				s = args[2] = (50.0 + (os->saturation - 1.0) * 50.0 / 9.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args);
-			/* hue scale is randomly chosen, no idea how it maps exactly */
-			args[2] = (32 / 3.14) * os->hue + 0x20;
+
+			/* scale VDPAU: -PI ~ PI   to SUNXI: 0 ~ 100 */
+			h = args[2] = (((os->hue / M_PI) + 1.0) * 50.0) + 0.5;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
+
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
+
+			VDPAU_DBG("Presentation queue csc change");
+			VDPAU_DBG("display driver -> bright: %d, contrast: %d, saturation: %d, hue: %d", b, c, s, h);
 			os->csc_change = 0;
 		}
 	}
