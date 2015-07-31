@@ -130,7 +130,11 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	uint32_t clip_width = task->clip_width;
 	uint32_t clip_height = task->clip_height;
 
-	// FIXME: not correct position if no surface is in queue
+	/*
+	 * Check for XEvents like position and dimension changes,
+	 * unmapping and mapping of the window
+	 * FIXME: not correct position if no surface is in queue
+	 */
 	int i = 0;
 
 	while (XPending(q->device->display) && i++<20)
@@ -179,7 +183,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		}
 	}
 
-	if (q->target->drawable_unmap)
+	if (q->target->drawable_unmap) /* Window was unmapped: Close both layers */
 	{
 		if (q->target->drawable_unmap == 1) /* Window was or is already unmapped: Close both layers */
 		{
@@ -197,7 +201,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 	if (q->target->drawable_change)
 	{
-		// get new window offset
+		/* Get new window offset */
 		Window dummy;
 		XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen),
 		      0, 0, &q->target->x, &q->target->y, &dummy);
@@ -206,19 +210,19 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 		__disp_rect_t scn_win, src_win;
 
-		// Get scn window dimension and position
+		/* Get scn window dimension and position */
 		scn_win.x = q->target->x + os->video_dst_rect.x0;
 		scn_win.y = q->target->y + os->video_dst_rect.y0;
 		scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
 		scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
 
-		// Get src window dimension and position
+		/* Get src window dimension and position */
 		src_win.x = os->video_src_rect.x0;
 		src_win.y = os->video_src_rect.y0;
 		src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
 		src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
 
-		// Do the y cutoff (due to a bug in sunxi disp driver)
+		/* Do the y cutoff (due to a bug in sunxi disp driver) */
 		if (scn_win.y < 0)
 		{
 			int cutoff = -scn_win.y;
@@ -228,7 +232,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			scn_win.height -= cutoff;
 		}
 
-		// Reset window dimension and position
+		/* Reset window dimension and position */
 		args[2] = (unsigned long)(&scn_win);
 		ioctl(q->target->fd, DISP_CMD_LAYER_SET_SCN_WINDOW, args);
 		args[2] = (unsigned long)(&src_win);
@@ -237,6 +241,9 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		q->target->drawable_change = 0;
 	}
 
+	/*
+	 * Display the VIDEO layer
+	 */
 	if (os->vs)
 	{
 		static int last_id;
@@ -244,9 +251,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 		if (os->vs->start_flag == 1 || q->target->start_flag == 1)
 		{
-			last_id = -1; // reset the video.id
+			last_id = -1; /* Reset the video.id */
 
-			// VIDEO layer
 			__disp_layer_info_t layer_info;
 			memset(&layer_info, 0, sizeof(layer_info));
 
@@ -317,7 +323,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
 
-			os->vs->start_flag = 0; // initial run is done, only set video.addr[] in the next runs
+			/* Initial run is done, only set video.addr[] in the next runs */
+			os->vs->start_flag = 0;
 			q->target->start_flag = 0;
 		}
 		else
@@ -355,12 +362,15 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			last_id++;
 		}
 
-		// Note: might be more reliable (but slower and problematic when there
-		// are driver issues and the GET functions return wrong values) to query the
-		// old values instead of relying on our internal csc_change.
-		// Since the driver calculates a matrix out of these values after each
-		// set doing this unconditionally is costly.
-		if (os->csc_change) {
+		/*
+		 * Note: might be more reliable (but slower and problematic when there
+		 * are driver issues and the GET functions return wrong values) to query the
+		 * old values instead of relying on our internal csc_change.
+		 * Since the driver calculates a matrix out of these values after each
+		 * set doing this unconditionally is costly.
+		 */
+		if (os->csc_change)
+		{
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
 			args[2] = 0xff * os->brightness + 0x20;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
@@ -368,28 +378,31 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
 			args[2] = 0x20 * os->saturation;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args);
-			// hue scale is randomly chosen, no idea how it maps exactly
+			/* hue scale is randomly chosen, no idea how it maps exactly */
 			args[2] = (32 / 3.14) * os->hue + 0x20;
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
 			os->csc_change = 0;
 		}
 	}
-	else
+	else /* No video surface present. Close the layer. */
 	{
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
 	}
 
+	/* OSD is disabled, so skip OSD displaying. */
 	if (!q->device->osd_enabled)
 		return VDP_STATUS_OK;
 
+	/*
+	 * Display the OSD layer
+	 */
 	if (os->rgba.flags & RGBA_FLAG_NEEDS_CLEAR)
 		rgba_clear(&os->rgba);
 
 	if (os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
-		// TOP layer
 		rgba_flush(&os->rgba);
 
 		__disp_layer_info_t layer_info;
@@ -450,7 +463,7 @@ static void *presentation_thread(void *param)
 		VDPAU_DBG("Error opening framebuffer device /dev/fb0");
 
 	while (!end_presentation) {
-		// do the VSync
+		/* do the VSync */
 		if ((!fd_fb) || (ioctl(fd_fb, FBIO_WAITFORVSYNC, 0)))
 			VDPAU_DBG("VSync failed");
 		frame_time = get_time();
@@ -465,7 +478,7 @@ static void *presentation_thread(void *param)
 
 		if(!q_isEmpty(Queue))
 		{
-			// remove it from Queue
+			/* remove it from Queue */
 			task_t *task;
 			if (!q_pop_head(Queue, (void *)&task))
 			{
@@ -473,7 +486,7 @@ static void *presentation_thread(void *param)
 				os_pprev = os_prev;
 				os_prev = os_cur;
 
-				// run the task
+				/* run the task */
 				do_presentation_queue_display(task);
 				free(task);
 			}
@@ -540,6 +553,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		args[1] = (unsigned long)(&ck);
 		ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
 	}
+
 	qt->start_flag = 1;
 	qt->drawable_change = 0;
 	qt->drawable_unmap = 0;
@@ -551,7 +565,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	qt->drawable = drawable;
 	XSelectInput(dev->display, drawable, StructureNotifyMask);
 
-	// get current window position
+	/* get current window position */
 	Window dummy;
 	XTranslateCoordinates(dev->display, qt->drawable, RootWindow(dev->display, dev->screen), 0, 0, &qt->x, &qt->y, &dummy);
 	XSetWindowBackground(dev->display, drawable, 0x000102);
@@ -590,7 +604,7 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	q->target = sref(qt);
 	q->device = sref(dev);
 
-	// initialize queue and launch worker thread
+	/* initialize queue and launch worker thread */
 	if (!Queue) {
 		end_presentation = 0;
 		Queue = q_queue_init();
