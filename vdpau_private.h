@@ -122,6 +122,8 @@ typedef struct
 	float contrast;
 	float saturation;
 	float hue;
+	VdpTime first_presentation_time;
+	VdpPresentationQueueStatus status;
 } output_surface_ctx_t;
 
 typedef struct
@@ -188,6 +190,7 @@ VdpGetInformationString vdp_get_information_string;
 
 VdpPresentationQueueTargetCreateX11 vdp_presentation_queue_target_create_x11;
 VdpPresentationQueueCreate vdp_presentation_queue_create;
+VdpPresentationQueueDestroy vdp_presentation_queue_destroy;
 VdpPresentationQueueSetBackgroundColor vdp_presentation_queue_set_background_color;
 VdpPresentationQueueGetBackgroundColor vdp_presentation_queue_get_background_color;
 VdpPresentationQueueGetTime vdp_presentation_queue_get_time;

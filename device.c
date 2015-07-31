@@ -138,7 +138,7 @@ static void *const functions[] =
 	[VDP_FUNC_ID_VIDEO_MIXER_RENDER]                                    = vdp_video_mixer_render,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_TARGET_DESTROY]                     = handle_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_CREATE]                             = vdp_presentation_queue_create,
-	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = handle_destroy,
+	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = vdp_presentation_queue_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_SET_BACKGROUND_COLOR]               = vdp_presentation_queue_set_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_BACKGROUND_COLOR]               = vdp_presentation_queue_get_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_TIME]                           = vdp_presentation_queue_get_time,
@@ -255,4 +255,3 @@ VdpStatus vdp_get_information_string(char const **information_string)
 	*information_string = "sunxi VDPAU Driver";
 	return VDP_STATUS_OK;
 }
-
