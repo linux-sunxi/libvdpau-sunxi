@@ -749,7 +749,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 	h264_video_private_t *output_p = get_surface_priv(c, output);
 	if (!output_p)
+	{
+		free(c);
 		return VDP_STATUS_RESOURCES;
+	}
 
 	if (info->field_pic_flag)
 		output_p->pic_type = PIC_TYPE_FIELD;
