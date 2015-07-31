@@ -58,7 +58,7 @@ qStatus q_pop_head(QUEUE *queue, void **data);
 qStatus q_isEmpty(QUEUE *queue);
 int q_length(QUEUE *queue);
 
-qStatus q_queue_free(QUEUE *queue);
+qStatus q_queue_free(QUEUE *queue, int only_nodes);
 qStatus q_node_free(NODE *node, int data_free);
 qStatus q_lock(QUEUE *queue);
 qStatus q_unlock(QUEUE *queue);

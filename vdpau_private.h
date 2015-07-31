@@ -53,6 +53,8 @@ typedef struct
 	int osd_enabled;
 	int vsync_enabled;
 	int deint_enabled;
+	int thread;
+	int thread_exit;
 } device_ctx_t;
 
 typedef struct

@@ -49,6 +49,8 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 
 	dev->display = XOpenDisplay(XDisplayString(display));
 	dev->screen = screen;
+	dev->thread = 0;
+	dev->thread_exit = 0;
 
 	if (!ve_open())
 	{

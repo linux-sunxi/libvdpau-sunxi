@@ -124,9 +124,9 @@ int q_length(QUEUE *queue)
 }
 
 /*
- * free queue and all nodes
+ * free queue and all nodes, depending on a flag
  */
-qStatus q_queue_free(QUEUE *queue)
+qStatus q_queue_free(QUEUE *queue, int only_nodes)
 {
 	if (!queue)
 		return Q_ERROR;
@@ -140,9 +140,13 @@ qStatus q_queue_free(QUEUE *queue)
 		q_node_free(tmp, 1);
 		tmp = next;
 	}
+
 	q_unlock(queue);
-	pthread_mutex_destroy(&queue->mutex);
-	free(queue);
+	if (!only_nodes)
+	{
+		pthread_mutex_destroy(&queue->mutex);
+		free(queue);
+	}
 
 	return Q_SUCCESS;
 }

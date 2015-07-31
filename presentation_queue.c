@@ -35,8 +35,8 @@
 
 static pthread_t presentation_thread_id;
 static QUEUE *Queue;
+
 static VdpTime frame_time;
-static int end_presentation;
 
 typedef struct task
 {
@@ -45,6 +45,7 @@ typedef struct task
 	uint32_t		clip_height;
 	output_surface_ctx_t	*surface;
 	queue_ctx_t		*queue;
+	uint32_t		wipeout;
 } task_t;
 
 static VdpTime get_time(void)
@@ -69,6 +70,8 @@ vdptime2timespec(VdpTime t)
 static void cleanup_presentation_queue_target(void *ptr, void *meta)
 {
 	queue_target_ctx_t *target = ptr;
+
+	VDPAU_LOG(LINFO, "Destroying target");
 
 	uint32_t args[4] = { 0, target->layer, 0, 0 };
 
@@ -119,6 +122,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->clip_height = clip_height;
 	task->surface = sref(os);
 	task->queue = sref(q);
+	task->wipeout = 0;
 	os->first_presentation_time = 0;
 	os->status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
 
@@ -133,10 +137,15 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	return VDP_STATUS_OK;
 }
 
-static VdpStatus do_presentation_queue_display(task_t *task)
+static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 {
 	queue_ctx_t *q = task->queue;
 	output_surface_ctx_t *os = task->surface;
+
+	/* do the VSync, if enabled */
+	if (wait_for_vsync(q->device))
+		VDPAU_LOG(LWARN, "VSync failed");
+	frame_time = get_time();
 
 	uint32_t clip_width = task->clip_width;
 	uint32_t clip_height = task->clip_height;
@@ -271,7 +280,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		static int last_id;
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 
-		if (os->vs->start_flag == 1 || q->target->start_flag == 1)
+		if (os->vs->start_flag == 1 || q->target->start_flag == 1 || restart == 1)
 		{
 			last_id = -1; /* Reset the video.id */
 
@@ -535,41 +544,55 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-	smart queue_ctx_t *q = (queue_ctx_t *)param;
+
+	smart device_ctx_t *dev = (device_ctx_t *)param;
 
 	output_surface_ctx_t *os_cur = NULL;
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_pprev = NULL;
 
-	while (!end_presentation) {
-		if(!q_isEmpty(Queue)) /* We have a task in the queue to display */
+	int restart = 1;
+
+	while (!dev->thread_exit) {
+		if(Queue && !q_isEmpty(Queue)) /* We have a task in the queue to display */
 		{
 			task_t *task;
 			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
 			{
-				/* do the VSync, if enabled */
-				if (wait_for_vsync(q->device))
-					VDPAU_LOG(LWARN, "VSync failed");
-				frame_time = get_time();
-
-				/* Rotate the surfaces and set the status flags */
-				if (os_prev) /* This is the actually displayed surface */
+				if (task->wipeout) /* Got the wipeout task */
 				{
-					os_prev->first_presentation_time = frame_time;
-					os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+					sfree(os_cur);
+					os_cur = NULL;
+					sfree(os_prev);
+					os_prev = NULL;
+					sfree(os_pprev);
+					os_pprev = NULL;
+					dev->thread_exit = 1;
+					VDPAU_LOG(LDBG, "Wipeout task received, ending presentation thread ...");
 				}
-				if (os_pprev) /* This is the previously displayed surface */
-					os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+				else
+				{
+					os_cur = sref(task->surface);
+					if (!os_cur)
+						VDPAU_LOG(LERR, "Error getting surface");
 
-				sfree(os_pprev);
-				os_pprev = os_prev;
-				sfree(os_prev);
-				os_prev = os_cur;
-				os_cur = sref(task->surface);
+					do_presentation_queue_display(task, restart);
 
-				/* display the task */
-				do_presentation_queue_display(task);
+					/* Rotate the surfaces and set the status flags */
+					if (os_prev) /* This is the actually displayed surface */
+					{
+						os_prev->first_presentation_time = frame_time;
+						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+					}
+					if (os_pprev) /* This is the previously displayed surface */
+						os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 
+					sfree(os_pprev);
+					os_pprev = os_prev;
+					sfree(os_prev);
+					os_prev = os_cur;
+					restart = 0;
+				}
 				sfree(task->surface);
 				sfree(task->queue);
 				free(task);
@@ -577,7 +600,7 @@ static void *presentation_thread(void *param)
 			else /* This should never happen! */
 				VDPAU_LOG(LERR, "Error getting task");
 		}
-		/* We have no surface in the queue, so simply wait some period of time (find a suitable value!)
+		/* We have no queue or surface in the queue, so simply wait some period of time (find a suitable value!)
 		 * Otherwise, while is doing a race, that it can't win.
 		 */
 		else
@@ -641,6 +664,8 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
 	}
 
+	VDPAU_LOG(LINFO, "Creating target");
+
 	qt->start_flag = 1;
 	qt->drawable_change = 0;
 	qt->drawable_unmap = 0;
@@ -694,14 +719,19 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	if (!q)
 		return VDP_STATUS_RESOURCES;
 
+	VDPAU_LOG(LINFO, "Creating queue");
+
 	q->target = sref(qt);
 	q->device = sref(dev);
 
-	/* initialize queue and launch worker thread */
-	if (!Queue) {
-		end_presentation = 0;
+	/* initialize queue and launch presentation thread */
+	if (!Queue)
 		Queue = q_queue_init();
-		pthread_create(&presentation_thread_id, NULL, presentation_thread, sref(q));
+
+	if (!(dev->thread)) {
+		dev->thread_exit = 0;
+		pthread_create(&presentation_thread_id, NULL, presentation_thread, sref(dev));
+		dev->thread = 1;
 	}
 
 	return handle_create(presentation_queue, q);
@@ -709,9 +739,27 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 
 VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue)
 {
-	end_presentation = 1;
+	smart queue_ctx_t *q = handle_get(presentation_queue);
+	if (!q)
+		return VDP_STATUS_INVALID_HANDLE;
+
+	VDPAU_LOG(LINFO, "Destroying queue");
+
+	task_t *task = (task_t *)calloc(1, sizeof(task_t));
+	task->wipeout = 1;
+
+	if(!q_push_tail(Queue, task))
+		VDPAU_LOG(LDBG, "Inserting wipe task");
+	else
+	{
+		VDPAU_LOG(LDBG, "Error inserting wipe task");
+		free(task);
+	}
+
 	pthread_join(presentation_thread_id, NULL);
-	q_queue_free(Queue);
+	q->device->thread = 0;
+
+	q_queue_free(Queue, 0);
 	Queue = NULL;
 
 	return handle_destroy(presentation_queue);
