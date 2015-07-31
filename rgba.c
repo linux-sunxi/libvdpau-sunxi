@@ -98,7 +98,7 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 		rgba_clear(rgba);
 
 	if (0 == d_rect.x0 && rgba->width == d_rect.x1 && source_pitches[0] == d_rect.x1 * 4) {
-		// full width
+		/* full width */
 		const int bytes_to_copy =
 			(d_rect.x1 - d_rect.x0) * (d_rect.y1 - d_rect.y0) * 4;
 		memcpy(rgba->data + d_rect.y0 * rgba->width * 4,
@@ -194,7 +194,7 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	if (colors || flags)
 		VDPAU_DBG_ONCE("%s: colors and flags not implemented!", __func__);
 
-	// set up source/destination rects using defaults where required
+	/* set up source/destination rects using defaults where required */
 	VdpRect s_rect = {0, 0, 0, 0};
 	VdpRect d_rect = {0, 0, dest->width, dest->height};
 	s_rect.x1 = src ? src->width : 1;
@@ -205,7 +205,7 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	if (destination_rect)
 		d_rect = *destination_rect;
 
-	// ignore zero-sized surfaces (also workaround for g2d driver bug)
+	/* ignore zero-sized surfaces (also workaround for g2d driver bug) */
 	if (s_rect.x0 == s_rect.x1 || s_rect.y0 == s_rect.y1 ||
 	    d_rect.x0 == d_rect.x1 || d_rect.y0 == d_rect.y1)
 		return VDP_STATUS_OK;

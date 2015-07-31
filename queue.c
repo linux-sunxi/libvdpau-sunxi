@@ -19,8 +19,8 @@
 
 #include "queue.h"
 
-/* initialize queue
- *
+/*
+ * initialize queue
  */
 QUEUE *q_queue_init(void)
 {
@@ -31,8 +31,8 @@ QUEUE *q_queue_init(void)
 	return queue;
 }
 
-/* allocate node data
- *
+/*
+ * allocate node data
  */
 NODE *allocate_node(void *data)
 {
@@ -42,8 +42,8 @@ NODE *allocate_node(void *data)
 	return (node);
 }
 
-/* push node to the tail position
- *
+/*
+ * push node to the tail position
  */
 qStatus q_push_tail(QUEUE *queue, void *data)
 {
@@ -71,8 +71,8 @@ qStatus q_push_tail(QUEUE *queue, void *data)
 	return Q_SUCCESS;
 }
 
-/* drop node at head position
- *
+/*
+ * drop node at head position
  */
 qStatus q_pop_head(QUEUE *queue, void **data)
 {
@@ -104,8 +104,8 @@ qStatus q_pop_head(QUEUE *queue, void **data)
 	return Q_SUCCESS;
 }
 
-/* check, if queue is empty
- *
+/*
+ * check, if queue is empty
  */
 qStatus q_isEmpty(QUEUE *queue)
 {
@@ -115,16 +115,16 @@ qStatus q_isEmpty(QUEUE *queue)
 	return Q_SUCCESS;
 }
 
-/* return the length of the queue
- *
+/*
+ * return the length of the queue
  */
 int q_length(QUEUE *queue)
 {
 	return queue->length;
 }
 
-/* free queue and all nodes
- *
+/*
+ * free queue and all nodes
  */
 qStatus q_queue_free(QUEUE *queue)
 {
@@ -147,8 +147,8 @@ qStatus q_queue_free(QUEUE *queue)
 	return Q_SUCCESS;
 }
 
-/* free node and allocated data
- *
+/*
+ * free node and allocated data
  */
 qStatus q_node_free(NODE *node, int data_free)
 {
@@ -163,8 +163,8 @@ qStatus q_node_free(NODE *node, int data_free)
 	return Q_SUCCESS;
 }
 
-/* lock the queue
- *
+/*
+ * lock the queue
  */
 qStatus q_lock(QUEUE *queue)
 {
@@ -174,8 +174,8 @@ qStatus q_lock(QUEUE *queue)
 	return  Q_SUCCESS;
 }
 
-/* unlock the queue
- *
+/*
+ * unlock the queue
  */
 qStatus q_unlock(QUEUE *queue)
 {

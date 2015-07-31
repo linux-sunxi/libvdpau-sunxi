@@ -105,36 +105,36 @@ static int decode_vop_header(bitstream *bs, VdpPictureInfoMPEG4Part2 const *info
 {
 	h->vop_coding_type = get_bits(bs, 2);
 
-	// modulo_time_base
+	/* modulo_time_base */
 	while (get_bits(bs, 1) != 0);
 
 	if (get_bits(bs, 1) != 1)
 		VDPAU_DBG("vop header marker error");
 
-	// vop_time_increment
+	/* vop_time_increment */
 	get_bits(bs, 32 - __builtin_clz(info->vop_time_increment_resolution));
 
 	if (get_bits(bs, 1) != 1)
 		VDPAU_DBG("vop header marker error");
 
-	// vop_coded
+	/* vop_coded */
 	if (!get_bits(bs, 1))
 		return 0;
 
-	// rounding_type
+	/* rounding_type */
 	if (h->vop_coding_type == VOP_P)
 		get_bits(bs, 1);
 
 	h->intra_dc_vlc_thr = get_bits(bs, 3);
 
-	// assume default size of 5 bits
+	/* assume default size of 5 bits */
 	h->vop_quant = get_bits(bs, 5);
 
-	// vop_fcode_forward
+	/* vop_fcode_forward */
 	if (h->vop_coding_type != VOP_I)
 		get_bits(bs, 3);
 
-	// vop_fcode_backward
+	/* vop_fcode_backward */
 	if (h->vop_coding_type == VOP_B)
 		get_bits(bs, 3);
 
@@ -170,24 +170,24 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		if (!decode_vop_header(&bs, info, &hdr))
 			continue;
 
-		// activate MPEG engine
+		/* activate MPEG engine */
 		void *ve_regs = ve_get(VE_ENGINE_MPEG, 0);
 
-		// set buffers
+		/* set buffers */
 		writel(ve_virt2phys(decoder_p->mbh_buffer), ve_regs + VE_MPEG_MBH_ADDR);
 		writel(ve_virt2phys(decoder_p->dcac_buffer), ve_regs + VE_MPEG_DCAC_ADDR);
 		writel(ve_virt2phys(decoder_p->ncf_buffer), ve_regs + VE_MPEG_NCF_ADDR);
 
-		// set output buffers
+		/* set output buffers */
 		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_REC_LUMA);
 		writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_REC_CHROMA);
 		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
 		writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_ROT_CHROMA);
 
-		// ??
+		/* ?? */
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
 
-		// set vop header
+		/* set vop header */
 		writel(((hdr.vop_coding_type == VOP_B ? 0x1 : 0x0) << 28)
 			| (info->quant_type << 24)
 			| (info->quarter_sample << 23)
@@ -201,22 +201,22 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 			| ((hdr.vop_coding_type == VOP_B ? info->vop_fcode_backward : 0) << 0)
 			, ve_regs + VE_MPEG_VOP_HDR);
 
-		// set size
+		/* set size */
 		uint16_t width = (decoder->width + 15) / 16;
 		uint16_t height = (decoder->height + 15) / 16;
 		writel((((width + 1) & ~0x1) << 16) | (width << 8) | height, ve_regs + VE_MPEG_SIZE);
 		writel(((width * 16) << 16) | (height * 16), ve_regs + VE_MPEG_FRAME_SIZE);
 
-		// ??
+		/* ?? */
 		writel(0x0, ve_regs + VE_MPEG_MBA);
 
-		// enable interrupt, unknown control flags
+		/* enable interrupt, unknown control flags */
 		writel(0x80084198 | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
 
-		// set quantization parameter
+		/* set quantization parameter */
 		writel(hdr.vop_quant, ve_regs + VE_MPEG_QP_INPUT);
 
-		// set forward/backward predicion buffers
+		/* set forward/backward predicion buffers */
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			smart video_surface_ctx_t *forward = handle_get(info->forward_reference);
@@ -230,39 +230,39 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 			writel(ve_virt2phys(backward->yuv->data + backward->luma_size), ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
-		// set trb/trd
+		/* set trb/trd */
 		if (hdr.vop_coding_type == VOP_B)
 		{
 			writel((info->trb[0] << 16) | (info->trd[0] << 0), ve_regs + VE_MPEG_TRBTRD_FRAME);
-			// unverified:
+			/* unverified: */
 			writel((info->trb[1] << 16) | (info->trd[1] << 0), ve_regs + VE_MPEG_TRBTRD_FIELD);
 		}
 
-		// clear status
+		/* clear status */
 		writel(0xffffffff, ve_regs + VE_MPEG_STATUS);
 
-		// set input offset in bits
+		/* set input offset in bits */
 		writel(bs.bitpos, ve_regs + VE_MPEG_VLD_OFFSET);
 
-		// set input length in bits
+		/* set input length in bits */
 		writel(len * 8 - bs.bitpos, ve_regs + VE_MPEG_VLD_LEN);
 
-		// input end
+		/* input end */
 		uint32_t input_addr = ve_virt2phys(decoder->data);
 		writel(input_addr + VBV_SIZE - 1, ve_regs + VE_MPEG_VLD_END);
 
-		// set input buffer
+		/* set input buffer */
 		writel((input_addr & 0x0ffffff0) | (input_addr >> 28) | (0x7 << 28), ve_regs + VE_MPEG_VLD_ADDR);
 
-		// trigger
+		/* trigger */
 		writel(0x8400000d | ((width * height) << 8), ve_regs + VE_MPEG_TRIGGER);
 
 		ve_wait(1);
 
-		// clear status
+		/* clear status */
 		writel(readl(ve_regs + VE_MPEG_STATUS) | 0xf, ve_regs + VE_MPEG_STATUS);
 
-		// stop MPEG engine
+		/* stop MPEG engine */
 		ve_put();
 	}
 
