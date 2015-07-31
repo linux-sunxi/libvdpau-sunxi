@@ -102,6 +102,17 @@ static VdpStatus wait_for_vsync(device_ctx_t *dev)
 	return VDP_STATUS_OK;
 }
 
+static int rect_changed(VdpRect rect1, VdpRect rect2)
+{
+	if ((rect1.x0 != rect2.x0) ||
+	    (rect1.x1 != rect2.x1) ||
+	    (rect1.y0 != rect2.y0) ||
+	    (rect1.y1 != rect2.y1))
+		return 1;
+
+	return 0;
+}
+
 VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue,
                                          VdpOutputSurface surface,
                                          uint32_t clip_width,
@@ -578,12 +589,23 @@ static void *presentation_thread(void *param)
 
 					do_presentation_queue_display(task, restart);
 
+					restart = 0;
+
 					/* Rotate the surfaces and set the status flags */
 					if (os_prev) /* This is the actually displayed surface */
 					{
 						os_prev->first_presentation_time = frame_time;
 						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
 					}
+
+					/* Trigger display init, if the video rect size has changed */
+					if ((rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect)) ||
+					    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
+					{
+						VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
+						restart = 1;
+					}
+
 					if (os_pprev) /* This is the previously displayed surface */
 						os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 
@@ -591,7 +613,7 @@ static void *presentation_thread(void *param)
 					os_pprev = os_prev;
 					sfree(os_prev);
 					os_prev = os_cur;
-					restart = 0;
+
 				}
 				sfree(task->surface);
 				sfree(task->queue);
