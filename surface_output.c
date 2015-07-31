@@ -53,6 +53,8 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 
 	out->contrast = 1.0;
 	out->saturation = 1.0;
+	out->first_presentation_time = 0;
+	out->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 
 	ret = rgba_create(&out->rgba, dev, width, height, rgba_format);
 	if (ret != VDP_STATUS_OK)
