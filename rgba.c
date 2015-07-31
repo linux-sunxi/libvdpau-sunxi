@@ -66,6 +66,8 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 		rgba->dirty.x1 = 0;
 		rgba->dirty.y1 = 0;
 		rgba_fill(rgba, NULL, 0x00000000);
+		rgba->id = 0;
+		rgba->flags = 0;
 	}
 
 	return VDP_STATUS_OK;
@@ -116,6 +118,9 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 	rgba->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
+
+	rgba->flags &= ~RGBA_FLAG_RENDERED;
+	rgba->id++;
 
 	return VDP_STATUS_OK;
 }
@@ -176,6 +181,9 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	rgba->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
+
+	rgba->flags &= ~RGBA_FLAG_RENDERED;
+	rgba->id++;
 
 	return VDP_STATUS_OK;
 }

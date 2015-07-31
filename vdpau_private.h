@@ -125,6 +125,9 @@ typedef struct
 #define RGBA_FLAG_DIRTY (1 << 0)
 #define RGBA_FLAG_NEEDS_FLUSH (1 << 1)
 #define RGBA_FLAG_NEEDS_CLEAR (1 << 2)
+#define RGBA_FLAG_CHANGED (1 << 3)
+#define RGBA_FLAG_RENDERED (1 << 4)
+#define RGBA_FLAG_LAYEROPEN (1 << 5)
 
 typedef struct
 {
@@ -134,15 +137,17 @@ typedef struct
 	void *data;
 	VdpRect dirty;
 	uint32_t flags;
+	uint32_t id;
 } rgba_surface_t;
 
 typedef struct
 {
-	rgba_surface_t rgba;
+	rgba_surface_t rgba, prev_rgba;
 	video_surface_ctx_t *vs;
 	yuv_data_t *yuv;
 	VdpRect video_src_rect, video_dst_rect;
 	int csc_change;
+	uint32_t rgba_cnt;
 	float brightness;
 	float contrast;
 	float saturation;
