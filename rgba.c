@@ -255,7 +255,7 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 		rgba_flush(dest);
 
 		args.flag = G2D_FIL_PIXEL_ALPHA;
-		args.dst_image.addr[0] = ve_virt2phys(dest->data) + 0x40000000;
+		args.dst_image.addr[0] = ve_virt2phys(dest->data) + DRAM_OFFSET;
 		args.dst_image.w = dest->width;
 		args.dst_image.h = dest->height;
 		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
@@ -291,7 +291,7 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		rgba_flush(src);
 
 		args.flag = (dest->flags & RGBA_FLAG_NEEDS_CLEAR) ? G2D_BLT_NONE : G2D_BLT_PIXEL_ALPHA;
-		args.src_image.addr[0] = ve_virt2phys(src->data) + 0x40000000;
+		args.src_image.addr[0] = ve_virt2phys(src->data) + DRAM_OFFSET;
 		args.src_image.w = src->width;
 		args.src_image.h = src->height;
 		args.src_image.format = G2D_FMT_ARGB_AYUV8888;
@@ -300,7 +300,7 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		args.src_rect.y = src_rect->y0;
 		args.src_rect.w = src_rect->x1 - src_rect->x0;
 		args.src_rect.h = src_rect->y1 - src_rect->y0;
-		args.dst_image.addr[0] = ve_virt2phys(dest->data) + 0x40000000;
+		args.dst_image.addr[0] = ve_virt2phys(dest->data) + DRAM_OFFSET;
 		args.dst_image.w = dest->width;
 		args.dst_image.h = dest->height;
 		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;

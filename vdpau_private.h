@@ -22,6 +22,7 @@
 
 #define MAX_HANDLES 64
 #define VBV_SIZE (1 * 1024 * 1024)
+#define DRAM_OFFSET (0x40000000)
 
 #define DEBUG
 #define DEBUG_LEVEL LINFO

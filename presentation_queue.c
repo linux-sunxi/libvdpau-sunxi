@@ -343,9 +343,9 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 				layer_info.scn_win.height -= cutoff;
 			}
 
-			layer_info.fb.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
-			layer_info.fb.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
-			layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
+			layer_info.fb.addr[0] = ve_virt2phys(os->yuv->data) + DRAM_OFFSET;
+			layer_info.fb.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + DRAM_OFFSET;
+			layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + DRAM_OFFSET;
 
 			args[2] = (unsigned long)(&layer_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
@@ -363,9 +363,9 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			__disp_video_fb_t video;
 			memset(&video, 0, sizeof(__disp_video_fb_t));
 			video.id = last_id + 1;
-			video.addr[0] = ve_virt2phys(os->yuv->data) + 0x40000000;
-			video.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
-			video.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
+			video.addr[0] = ve_virt2phys(os->yuv->data) + DRAM_OFFSET;
+			video.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + DRAM_OFFSET;
+			video.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + DRAM_OFFSET;
 
 			if (q->device->flags & DEVICE_FLAG_DEINT)
 			{
@@ -490,7 +490,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			layer_info.scn_win.y = q->target->y;
 			layer_info.scn_win.width = clip_width ? clip_width : os->rgba.width;
 			layer_info.scn_win.height = clip_height ? clip_height : os->rgba.height;
-			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
+			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
 
 			args[2] = (unsigned long)(&layer_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
@@ -526,7 +526,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			args[2] = (unsigned long)(&fb_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_GET_FB, args);
 
-			fb_info.addr[0] = ve_virt2phys(os->rgba.data) + 0x40000000;
+			fb_info.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
 			args[2] = (unsigned long)(&fb_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args);
 		}
