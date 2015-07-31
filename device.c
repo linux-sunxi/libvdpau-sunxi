@@ -27,9 +27,9 @@ static void cleanup_device(void *ptr, void *meta)
 {
 	device_ctx_t *device = ptr;
 
-	if (device->osd_enabled)
+	if (device->flags & DEVICE_FLAG_OSD)
 		close(device->g2d_fd);
-	if (device->vsync_enabled)
+	if (device->flags & DEVICE_FLAG_VSYNC)
 		close(device->fb_fd);
 	ve_close();
 	XCloseDisplay(device->display);
@@ -49,8 +49,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 
 	dev->display = XOpenDisplay(XDisplayString(display));
 	dev->screen = screen;
-	dev->thread = 0;
-	dev->thread_exit = 0;
+	dev->flags = 0;
 
 	if (!ve_open())
 	{
@@ -67,7 +66,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 		dev->fb_fd = open("/dev/fb0", O_RDWR);
 		if (dev->fb_fd != -1)
 		{
-			dev->vsync_enabled = 1;
+			dev->flags |= DEVICE_FLAG_VSYNC;
 			VDPAU_LOG(LINFO, "VSync enabled");
 		}
 		else
@@ -83,7 +82,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 		dev->g2d_fd = open("/dev/g2d", O_RDWR);
 		if (dev->g2d_fd != -1)
 		{
-			dev->osd_enabled = 1;
+			dev->flags |= DEVICE_FLAG_OSD;
 			VDPAU_LOG(LINFO, "OSD enabled.");
 		}
 		else
@@ -96,7 +95,7 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 		VDPAU_LOG(LINFO, "Deinterlacer disabled.");
 	else
 	{
-		dev->deint_enabled = 1;
+		dev->flags |= DEVICE_FLAG_DEINT;
 		VDPAU_LOG(LINFO, "Deinterlacer enabled.");
 	}
 

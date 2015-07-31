@@ -96,7 +96,7 @@ static void cleanup_presentation_queue_target(void *ptr, void *meta)
 static VdpStatus wait_for_vsync(device_ctx_t *dev)
 {
 	/* do the VSync */
-	if (dev->vsync_enabled && ioctl(dev->fb_fd, FBIO_WAITFORVSYNC, 0))
+	if ((dev->flags & DEVICE_FLAG_VSYNC) && ioctl(dev->fb_fd, FBIO_WAITFORVSYNC, 0))
 		return VDP_STATUS_ERROR;
 
 	return VDP_STATUS_OK;
@@ -163,7 +163,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 	{
 		XEvent ev;
 		XNextEvent(q->device->display, &ev);
-		
+
 
 		VDPAU_LOG(LDBG, "Received the following XEvent: %s", event_names[ev.type]);
 
@@ -220,7 +220,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		{
 			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-			if (q->device->osd_enabled)
+			if (q->device->flags & DEVICE_FLAG_OSD)
 			{
 				args[1] = q->target->layer_top;
 				ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
@@ -290,7 +290,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			args[2] = (unsigned long)(&layer_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args);
 
-			layer_info.pipe = q->device->osd_enabled ? 0 : 1;
+			layer_info.pipe = (q->device->flags & DEVICE_FLAG_OSD) ? 0 : 1;
 			layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
 			layer_info.fb.format = DISP_FORMAT_YUV420;
 			layer_info.fb.seq = DISP_SEQ_UVUV;
@@ -332,7 +332,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			layer_info.scn_win.y = q->target->y + os->video_dst_rect.y0;
 			layer_info.scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
 			layer_info.scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
-			layer_info.ck_enable = q->device->osd_enabled ? 0 : 1;
+			layer_info.ck_enable = (q->device->flags & DEVICE_FLAG_OSD) ? 0 : 1;
 
 			if (layer_info.scn_win.y < 0)
 			{
@@ -367,7 +367,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			video.addr[1] = ve_virt2phys(os->yuv->data + os->vs->luma_size) + 0x40000000;
 			video.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + 0x40000000;
 
-			if (q->device->deint_enabled)
+			if (q->device->flags & DEVICE_FLAG_DEINT)
 			{
 				video.interlace = os->video_deinterlace;
 				video.top_field_first = os->video_field ? 0 : 1;
@@ -442,7 +442,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 	}
 
 	/* OSD is disabled, so skip OSD displaying. */
-	if (!q->device->osd_enabled)
+	if (!(q->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
 
 	/*
@@ -553,7 +553,7 @@ static void *presentation_thread(void *param)
 
 	int restart = 1;
 
-	while (!dev->thread_exit) {
+	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
 		if(Queue && !q_isEmpty(Queue)) /* We have a task in the queue to display */
 		{
 			task_t *task;
@@ -567,7 +567,7 @@ static void *presentation_thread(void *param)
 					os_prev = NULL;
 					sfree(os_pprev);
 					os_pprev = NULL;
-					dev->thread_exit = 1;
+					dev->flags |= DEVICE_FLAG_EXIT;
 					VDPAU_LOG(LDBG, "Wipeout task received, ending presentation thread ...");
 				}
 				else
@@ -638,9 +638,9 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		return VDP_STATUS_RESOURCES;
 
 	args[1] = qt->layer;
-	ioctl(qt->fd, dev->osd_enabled ? DISP_CMD_LAYER_TOP : DISP_CMD_LAYER_BOTTOM, args);
+	ioctl(qt->fd, (dev->flags & DEVICE_FLAG_OSD) ? DISP_CMD_LAYER_TOP : DISP_CMD_LAYER_BOTTOM, args);
 
-	if (dev->osd_enabled)
+	if (dev->flags & DEVICE_FLAG_OSD)
 	{
 		args[1] = DISP_LAYER_WORK_MODE_NORMAL;
 		qt->layer_top = ioctl(qt->fd, DISP_CMD_LAYER_REQUEST, args);
@@ -728,10 +728,10 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	if (!Queue)
 		Queue = q_queue_init();
 
-	if (!(dev->thread)) {
-		dev->thread_exit = 0;
+	if (!(dev->flags & DEVICE_FLAG_THREAD)) {
+		dev->flags &= ~DEVICE_FLAG_EXIT;
 		pthread_create(&presentation_thread_id, NULL, presentation_thread, sref(dev));
-		dev->thread = 1;
+		dev->flags |= DEVICE_FLAG_THREAD;
 	}
 
 	return handle_create(presentation_queue, q);
@@ -757,7 +757,7 @@ VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue
 	}
 
 	pthread_join(presentation_thread_id, NULL);
-	q->device->thread = 0;
+	q->device->flags &= ~DEVICE_FLAG_THREAD;
 
 	q_queue_free(Queue, 0);
 	Queue = NULL;

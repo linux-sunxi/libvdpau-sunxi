@@ -55,7 +55,7 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 	rgba->height = height;
 	rgba->format = format;
 
-	if (device->osd_enabled)
+	if (device->flags & DEVICE_FLAG_OSD)
 	{
 		rgba->data = ve_malloc(width * height * 4);
 		if (!rgba->data)
@@ -78,7 +78,7 @@ void rgba_destroy(rgba_surface_t *rgba)
 	if (!rgba->device)
 		return;
 
-	if (rgba->device->osd_enabled)
+	if (rgba->device->flags & DEVICE_FLAG_OSD)
 		ve_free(rgba->data);
 
 	sfree(rgba->device);
@@ -89,7 +89,7 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
                                uint32_t const *source_pitches,
                                VdpRect const *destination_rect)
 {
-	if (!rgba->device->osd_enabled)
+	if (!(rgba->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
 
 	VdpRect d_rect = {0, 0, rgba->width, rgba->height};
@@ -136,7 +136,7 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	if (color_table_format != VDP_COLOR_TABLE_FORMAT_B8G8R8X8)
 		return VDP_STATUS_INVALID_COLOR_TABLE_FORMAT;
 
-	if (!rgba->device->osd_enabled)
+	if (!(rgba->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
 
 	int x, y;
@@ -196,7 +196,7 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
                               VdpOutputSurfaceRenderBlendState const *blend_state,
                               uint32_t flags)
 {
-	if (!dest->device->osd_enabled)
+	if (!(dest->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
 
 	if (colors || flags)
@@ -250,7 +250,7 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 {
 	g2d_fillrect args;
 
-	if (dest->device->osd_enabled)
+	if (dest->device->flags & DEVICE_FLAG_OSD)
 	{
 		rgba_flush(dest);
 
@@ -285,7 +285,7 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 {
 	g2d_blt args;
 
-	if (dest->device->osd_enabled)
+	if (dest->device->flags & DEVICE_FLAG_OSD)
 	{
 		rgba_flush(dest);
 		rgba_flush(src);

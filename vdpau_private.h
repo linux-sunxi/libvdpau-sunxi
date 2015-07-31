@@ -42,6 +42,13 @@
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
+/* Flags for device */
+#define DEVICE_FLAG_OSD (1 << 0)
+#define DEVICE_FLAG_DEINT (1 << 1)
+#define DEVICE_FLAG_VSYNC (1 << 2)
+#define DEVICE_FLAG_THREAD (1 << 3)
+#define DEVICE_FLAG_EXIT (1 << 4)
+
 typedef struct
 {
 	Display *display;
@@ -50,11 +57,7 @@ typedef struct
 	void *preemption_callback_context;
 	int fb_fd;
 	int g2d_fd;
-	int osd_enabled;
-	int vsync_enabled;
-	int deint_enabled;
-	int thread;
-	int thread_exit;
+	uint32_t flags;
 } device_ctx_t;
 
 typedef struct
@@ -124,6 +127,7 @@ typedef struct
 	VdpCSCMatrix csc_matrix;
 } mixer_ctx_t;
 
+/* Flags for rgba surface */
 #define RGBA_FLAG_DIRTY (1 << 0)
 #define RGBA_FLAG_NEEDS_FLUSH (1 << 1)
 #define RGBA_FLAG_NEEDS_CLEAR (1 << 2)

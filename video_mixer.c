@@ -68,7 +68,7 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 
 	int i;
 
-	if (mix->device->deint_enabled)
+	if (mix->device->flags & DEVICE_FLAG_DEINT)
 	{
 		for (i = 0; i < feature_count; i++)
 		{
@@ -121,7 +121,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 
 	os->yuv = yuv_ref(os->vs->yuv);
 
-	if (mix->device->deint_enabled)
+	if (mix->device->flags & DEVICE_FLAG_DEINT)
 	{
 		os->video_deinterlace = (current_picture_structure == VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME ? 0 : 1);
 		os->video_field = current_picture_structure;
@@ -163,7 +163,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	mix->start_stream = 0;
 	mix->csc_change = 0;
 
-	if (mix->device->osd_enabled && (os->rgba.flags & RGBA_FLAG_DIRTY))
+	if ((mix->device->flags & DEVICE_FLAG_OSD) && (os->rgba.flags & RGBA_FLAG_DIRTY))
 		os->rgba.flags |= RGBA_FLAG_NEEDS_CLEAR;
 
 	if (layer_count != 0)
@@ -207,7 +207,7 @@ VdpStatus vdp_video_mixer_set_feature_enables(VdpVideoMixer mixer,
 
 	int i;
 
-	if (mix->device->deint_enabled)
+	if (mix->device->flags & DEVICE_FLAG_DEINT)
 	{
 		for (i = 0; i < feature_count; i++)
 		{
@@ -237,7 +237,7 @@ VdpStatus vdp_video_mixer_get_feature_enables(VdpVideoMixer mixer,
 
 	int i;
 
-	if (mix->device->deint_enabled)
+	if (mix->device->flags & DEVICE_FLAG_DEINT)
 	{
 		for (i = 0; i < feature_count; i++)
 		{
