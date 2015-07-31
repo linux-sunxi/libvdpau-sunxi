@@ -89,6 +89,15 @@ static void cleanup_presentation_queue_target(void *ptr, void *meta)
 		close(target->fd);
 }
 
+static VdpStatus wait_for_vsync(device_ctx_t *dev)
+{
+	/* do the VSync */
+	if (dev->vsync_enabled && ioctl(dev->fb_fd, FBIO_WAITFORVSYNC, 0))
+		return VDP_STATUS_ERROR;
+
+	return VDP_STATUS_OK;
+}
+
 VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue,
                                          VdpOutputSurface surface,
                                          uint32_t clip_width,
@@ -472,51 +481,50 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+	queue_ctx_t *q = (queue_ctx_t *)param;
 
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_pprev = NULL;
 
-	int fd_fb = 0;
-
-	fd_fb = open("/dev/fb0", O_RDWR);
-	if (!fd_fb)
-		VDPAU_DBG("Error opening framebuffer device /dev/fb0");
-
 	while (!end_presentation) {
-		/* do the VSync */
-		if ((!fd_fb) || (ioctl(fd_fb, FBIO_WAITFORVSYNC, 0)))
-			VDPAU_DBG("VSync failed");
-		frame_time = get_time();
-
-		if (os_prev) /* This is the actually displayed surface */
+		if(!q_isEmpty(Queue)) /* We have a task in the queue to display */
 		{
-			os_prev->first_presentation_time = frame_time;
-			os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
-		}
-		if (os_pprev) /* This is the previously displayed surface */
-			os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
-
-		if(!q_isEmpty(Queue))
-		{
-			/* remove it from Queue */
 			task_t *task;
-			if (!q_pop_head(Queue, (void *)&task))
+			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
 			{
+				/* do the VSync, if enabled */
+				if (wait_for_vsync(q->device))
+					VDPAU_DBG("VSync failed");
+				frame_time = get_time();
+
+				/* Rotate the surfaces and set the status flags */
+				if (os_prev) /* This is the actually displayed surface */
+				{
+					os_prev->first_presentation_time = frame_time;
+					os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+				}
+				if (os_pprev) /* This is the previously displayed surface */
+					os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+
+				/* display the task */
+				do_presentation_queue_display(task);
+
 				output_surface_ctx_t *os_cur = handle_get(task->surface);
 				os_pprev = os_prev;
 				os_prev = os_cur;
 
-				/* run the task */
-				do_presentation_queue_display(task);
 				free(task);
 			}
-			else
+			else /* This should never happen! */
 				VDPAU_DBG("Error getting task");
 		}
+		/* We have no surface in the queue, so simply wait some period of time (find a suitable value!)
+		 * Otherwise, while is doing a race, that it can't win.
+		 */
+		else
+			usleep(1000);
 	}
-
-	close(fd_fb);
-	return 0;
+	return NULL;
 }
 
 VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,

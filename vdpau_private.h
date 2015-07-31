@@ -44,9 +44,10 @@ typedef struct
 	int screen;
 	VdpPreemptionCallback *preemption_callback;
 	void *preemption_callback_context;
-	int fd;
+	int fb_fd;
 	int g2d_fd;
 	int osd_enabled;
+	int vsync_enabled;
 	int deint_enabled;
 } device_ctx_t;
 

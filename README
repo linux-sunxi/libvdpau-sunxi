@@ -37,6 +37,10 @@ To disable deinterlacer support, set VDPAU_DEINT environment
 variable to 0 (Deinterlacer is enabled by default):
    $ export VDPAU_DEINT=0
 
+To disable waiting for the vertical synchronisation, set VDPAU_VSYNC environment
+variable to 0 (VSync is enabled by default):
+   $ export VDPAU_VSYNC=0
+
 This partly breaks X11 integration due to hardware limitations. The video
 area can't be overlapped by other windows. For fullscreen use this is no
 problem.
