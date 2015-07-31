@@ -49,7 +49,10 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	dev->screen = screen;
 
 	if (!ve_open())
+	{
+		XCloseDisplay(dev->display);
 		return VDP_STATUS_ERROR;
+	}
 
 	char *env_vdpau_osd = getenv("VDPAU_OSD");
 	if (env_vdpau_osd && strncmp(env_vdpau_osd, "0", 1) == 0)
