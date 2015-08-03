@@ -89,6 +89,37 @@ void rgba_destroy(rgba_surface_t *rgba)
 	sfree(rgba->device);
 }
 
+VdpStatus rgba_get_bits_native(rgba_surface_t *rgba,
+                               VdpRect const *source_rect,
+                               void *const *destination_data,
+                               uint32_t const *destination_pitches)
+{
+	if (!(rgba->device->flags & DEVICE_FLAG_OSD))
+		return VDP_STATUS_OK;
+
+	VdpRect s_rect = {0, 0, rgba->width, rgba->height};
+	if (source_rect)
+		s_rect = *source_rect;
+
+	if (0 == s_rect.x0 && rgba->width == s_rect.x1 && destination_pitches[0] == s_rect.x1 * GET_BPP_FROM_FORMAT(rgba->format)) {
+		/* full width */
+		const int bytes_to_copy =
+			(s_rect.x1 - s_rect.x0) * (s_rect.y1 - s_rect.y0) * GET_BPP_FROM_FORMAT(rgba->format);
+		memcpy(destination_data[0],
+			   rgba->data + s_rect.y0 * rgba->width * GET_BPP_FROM_FORMAT(rgba->format), bytes_to_copy);
+	} else {
+		const unsigned int bytes_in_line = (s_rect.x1 - s_rect.x0) * GET_BPP_FROM_FORMAT(rgba->format);
+		unsigned int y;
+		for (y = s_rect.y0; y < s_rect.y1; y ++) {
+			memcpy(destination_data[0] + (y - s_rect.y0) * destination_pitches[0],
+				   rgba->data + (y * rgba->width + s_rect.x0) * GET_BPP_FROM_FORMAT(rgba->format),
+				   bytes_in_line);
+		}
+	}
+
+	return VDP_STATUS_OK;
+}
+
 VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
                                void const *const *source_data,
                                uint32_t const *source_pitches,

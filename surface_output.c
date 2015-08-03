@@ -20,13 +20,22 @@
 #include "vdpau_private.h"
 #include "rgba.h"
 
+#ifdef GRAB
+#include <sys/ioctl.h>
+#include "g2d_driver.h"
+#include "tiled_yuv.h"
+#include "ve.h"
+#endif
+
 static void cleanup_output_surface(void *ptr, void *meta)
 {
 	output_surface_ctx_t *surface = ptr;
 
 	rgba_destroy(&surface->rgba);
 	rgba_destroy(&surface->prev_rgba);
-	
+#ifdef GRAB
+	rgba_destroy(&surface->grab_rgba);
+#endif
 	if (surface->yuv)
 		yuv_unref(surface->yuv);
 
@@ -69,6 +78,16 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 		return ret;
 	}
 
+#ifdef GRAB
+	ret = rgba_create(&out->grab_rgba, dev, width, height, rgba_format);
+	if (ret != VDP_STATUS_OK)
+	{
+		rgba_destroy(&out->rgba);
+		rgba_destroy(&out->prev_rgba);
+		return ret;
+	}
+#endif
+
 	return handle_create(surface, out);
 }
 
@@ -102,7 +121,84 @@ VdpStatus vdp_output_surface_get_bits_native(VdpOutputSurface surface,
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	return VDP_STATUS_ERROR;
+#ifdef GRAB
+	g2d_blt args;
+
+	void *vs_data[2];
+	void *data;
+	uint32_t vs_destination_pitches[2];
+	uint32_t width;
+	uint32_t height;
+
+	width = out->vs->width;
+	height = out->vs->height;
+
+	data = ve_malloc(width * height + ((width + 1) / 2) * ((height + 1) / 2));
+	vs_data[0] = data;
+	vs_data[1] = data + (width * height);
+	vs_destination_pitches[0] = width;
+	vs_destination_pitches[1] = width / 2;
+
+	/* Convert tiled yuv into planar yuv YV12 */
+	tiled_to_planar(out->vs->yuv->data, vs_data[0], vs_destination_pitches[0], out->vs->width, out->vs->height);
+	tiled_to_planar(out->vs->yuv->data + out->vs->luma_size, vs_data[1], vs_destination_pitches[1], out->vs->width, out->vs->height / 2);
+
+	/* Blit the video frame into the surface */
+	args.flag = 0;
+	args.src_image.addr[0] = ve_virt2phys(vs_data[0]) + DRAM_OFFSET;
+	args.src_image.addr[1] = ve_virt2phys(vs_data[1]) + DRAM_OFFSET;
+	args.src_image.w = width;
+	args.src_image.h = height;
+	args.src_image.format = G2D_FMT_PYUV420UVC;
+	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.src_rect.x = source_rect->x0;
+	args.src_rect.y = source_rect->y0;
+	args.src_rect.w = source_rect->x1 - source_rect->x0;
+	args.src_rect.h = source_rect->y1 - source_rect->y0;
+	args.dst_image.addr[0] = ve_virt2phys(out->grab_rgba.data) + DRAM_OFFSET;
+	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.dst_x = 0;
+	args.dst_y = 0;
+	args.dst_image.w = width;
+	args.dst_image.h = height;
+	args.flag |= G2D_BLT_PIXEL_ALPHA;
+
+	ioctl(out->vs->device->g2d_fd, G2D_CMD_BITBLT, &args);
+
+	/* Blit the osd frame into the surface */
+	args.flag = 0;
+	args.src_image.addr[0] = ve_virt2phys(out->rgba.data) + DRAM_OFFSET;
+	args.src_image.w = width;
+	args.src_image.h = height;
+	args.src_image.format = G2D_FMT_ARGB_AYUV8888;
+	args.src_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.src_rect.x = source_rect->x0;
+	args.src_rect.y = source_rect->y0;
+	args.src_rect.w = source_rect->x1 - source_rect->x0;
+	args.src_rect.h = source_rect->y1 - source_rect->y0;
+	args.dst_image.addr[0] = ve_virt2phys(out->grab_rgba.data) + DRAM_OFFSET;
+	args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+	args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
+	args.dst_x = 0;
+	args.dst_y = 0;
+	args.dst_image.w = width;
+	args.dst_image.h = height;
+	args.flag |= G2D_BLT_PIXEL_ALPHA;
+
+	ioctl(out->vs->device->g2d_fd, G2D_CMD_BITBLT, &args);
+	ve_free(data);
+
+	return rgba_get_bits_native(&out->grab_rgba, source_rect, destination_data, destination_pitches);
+#endif
+	/*
+	 * This is wrong, because we only get the rgba surface (OSD) back.
+	 * In order to get both, video and OSD, we have to put them together
+	 * into one surface maybe via blitting, and then grab the whole surface
+	 * back into the buffer.
+	 */
+
+	return rgba_get_bits_native(&out->rgba, source_rect, destination_data, destination_pitches);
 }
 
 VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface,

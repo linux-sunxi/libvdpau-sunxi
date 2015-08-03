@@ -32,6 +32,7 @@
  * If set to 0, csc conversion will use the range 16~235 (PC use)
  */
 #define CSC_FULL_RANGE 1
+//#define GRAB /* Uncomment this to try experimental get_bits_native support */
 
 #include <stdlib.h>
 #include <csptr/smart_ptr.h>
@@ -158,6 +159,9 @@ typedef struct
 typedef struct
 {
 	rgba_surface_t rgba, prev_rgba;
+#ifdef GRAB
+	rgba_surface_t grab_rgba;
+#endif
 	video_surface_ctx_t *vs;
 	yuv_data_t *yuv;
 	VdpRect video_src_rect, video_dst_rect;

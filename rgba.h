@@ -30,6 +30,11 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 
 void rgba_destroy(rgba_surface_t *rgba);
 
+VdpStatus rgba_get_bits_native(rgba_surface_t *rgba,
+                               VdpRect const *source_rect,
+                               void *const *destination_data,
+                               uint32_t const *destination_pitches);
+
 VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
                                void const *const *source_data,
                                uint32_t const *source_pitches,
