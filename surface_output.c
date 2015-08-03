@@ -346,7 +346,8 @@ VdpStatus vdp_output_surface_query_capabilities(VdpDevice device,
 
 	*is_supported = (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 ||
 			 surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8 ||
-			 surface_rgba_format == VDP_RGBA_FORMAT_A8);	*max_width = 8192;
+			 surface_rgba_format == VDP_RGBA_FORMAT_A8) ? VDP_TRUE : VDP_FALSE;
+	*max_width = 8192;
 	*max_height = 8192;
 
 	return VDP_STATUS_OK;
@@ -363,7 +364,13 @@ VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice de
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
+#ifdef GRAB
+	*is_supported = (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 ||
+			 surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8 ||
+			 surface_rgba_format == VDP_RGBA_FORMAT_A8) ? VDP_TRUE : VDP_FALSE;
+#else
 	*is_supported = VDP_FALSE;
+#endif
 
 	return VDP_STATUS_OK;
 }
@@ -382,6 +389,17 @@ VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice devic
 		return VDP_STATUS_INVALID_HANDLE;
 
 	*is_supported = VDP_FALSE;
+
+	if (color_table_format != VDP_COLOR_TABLE_FORMAT_B8G8R8X8)
+		return VDP_STATUS_OK;
+
+	if (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 ||
+	    surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8 ||
+	    surface_rgba_format == VDP_RGBA_FORMAT_A8)
+	{
+		*is_supported = (bits_indexed_format == VDP_INDEXED_FORMAT_I8A8 ||
+				 bits_indexed_format == VDP_INDEXED_FORMAT_A8I8) ? VDP_TRUE : VDP_FALSE;
+	}
 
 	return VDP_STATUS_OK;
 }
