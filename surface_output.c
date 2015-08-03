@@ -248,8 +248,9 @@ VdpStatus vdp_output_surface_query_capabilities(VdpDevice device,
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	*is_supported = (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 || surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8);
-	*max_width = 8192;
+	*is_supported = (surface_rgba_format == VDP_RGBA_FORMAT_R8G8B8A8 ||
+			 surface_rgba_format == VDP_RGBA_FORMAT_B8G8R8A8 ||
+			 surface_rgba_format == VDP_RGBA_FORMAT_A8);	*max_width = 8192;
 	*max_height = 8192;
 
 	return VDP_STATUS_OK;

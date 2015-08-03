@@ -24,6 +24,9 @@
 #include "g2d_driver.h"
 #include "rgba.h"
 
+#define GET_BPP_FROM_FORMAT(rgba_format) (((rgba_format) == VDP_RGBA_FORMAT_A8) ? 1 : 4)
+#define VDPFORMAT_TO_G2DFORMAT(rgba_format) (((rgba_format) == VDP_RGBA_FORMAT_A8) ? G2D_FMT_8BPP_MONO :  G2D_FMT_ARGB_AYUV8888)
+
 static void dirty_add_rect(VdpRect *dirty, const VdpRect *rect)
 {
 	dirty->x0 = min(dirty->x0, rect->x0);
@@ -44,7 +47,9 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
                       uint32_t height,
                       VdpRGBAFormat format)
 {
-	if (format != VDP_RGBA_FORMAT_B8G8R8A8 && format != VDP_RGBA_FORMAT_R8G8B8A8)
+	if (format != VDP_RGBA_FORMAT_B8G8R8A8 &&
+	    format != VDP_RGBA_FORMAT_R8G8B8A8 &&
+	    format != VDP_RGBA_FORMAT_A8)
 		return VDP_STATUS_INVALID_RGBA_FORMAT;
 
 	if (width < 1 || width > 8192 || height < 1 || height > 8192)
@@ -57,7 +62,7 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 
 	if (device->flags & DEVICE_FLAG_OSD)
 	{
-		rgba->data = ve_malloc(width * height * 4);
+		rgba->data = ve_malloc(width * height * GET_BPP_FROM_FORMAT(rgba->format));
 		if (!rgba->data)
 			return VDP_STATUS_RESOURCES;
 
@@ -99,17 +104,21 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 	if ((rgba->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&rgba->dirty, &d_rect))
 		rgba_clear(rgba);
 
-	if (0 == d_rect.x0 && rgba->width == d_rect.x1 && source_pitches[0] == d_rect.x1 * 4) {
-		/* full width */
-		const int bytes_to_copy =
-			(d_rect.x1 - d_rect.x0) * (d_rect.y1 - d_rect.y0) * 4;
-		memcpy(rgba->data + d_rect.y0 * rgba->width * 4,
-			   source_data[0], bytes_to_copy);
-	} else {
-		const unsigned int bytes_in_line = (d_rect.x1-d_rect.x0) * 4;
+	if ((0 == d_rect.x0) && (rgba->width == d_rect.x1) && (source_pitches[0] == d_rect.x1 * GET_BPP_FROM_FORMAT(rgba->format)))
+	{
+		/* full line width */
+		const int bytes_to_copy = rgba->width * (d_rect.y1 - d_rect.y0) * GET_BPP_FROM_FORMAT(rgba->format);
+		memcpy(rgba->data + d_rect.y0 * rgba->width * GET_BPP_FROM_FORMAT(rgba->format),
+			   source_data[0],
+			   bytes_to_copy);
+	}
+	else
+	{
+		const unsigned int bytes_in_line = (d_rect.x1 - d_rect.x0) * GET_BPP_FROM_FORMAT(rgba->format);
 		unsigned int y;
-		for (y = d_rect.y0; y < d_rect.y1; y ++) {
-			memcpy(rgba->data + (y * rgba->width + d_rect.x0) * 4,
+		for (y = d_rect.y0; y < d_rect.y1; y ++)
+		{
+			memcpy(rgba->data + (y * rgba->width + d_rect.x0) * GET_BPP_FROM_FORMAT(rgba->format),
 				   source_data[0] + (y - d_rect.y0) * source_pitches[0],
 				   bytes_in_line);
 		}
@@ -254,11 +263,11 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 	{
 		rgba_flush(dest);
 
-		args.flag = G2D_FIL_PIXEL_ALPHA;
+		args.flag = 0;
 		args.dst_image.addr[0] = ve_virt2phys(dest->data) + DRAM_OFFSET;
 		args.dst_image.w = dest->width;
 		args.dst_image.h = dest->height;
-		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.format = VDPFORMAT_TO_G2DFORMAT(dest->format);
 		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
 		if (dest_rect)
 		{
@@ -274,8 +283,8 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 			args.dst_rect.w = dest->width;
 			args.dst_rect.h = dest->height;
 		}
-		args.color = color & 0xffffff ;
-		args.alpha = color >> 24;
+		args.flag |= G2D_FIL_PIXEL_ALPHA;
+		args.color = color & 0xffffff;
 
 		ioctl(dest->device->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
@@ -290,11 +299,11 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		rgba_flush(dest);
 		rgba_flush(src);
 
-		args.flag = (dest->flags & RGBA_FLAG_NEEDS_CLEAR) ? G2D_BLT_NONE : G2D_BLT_PIXEL_ALPHA;
+		args.flag = 0;
 		args.src_image.addr[0] = ve_virt2phys(src->data) + DRAM_OFFSET;
 		args.src_image.w = src->width;
 		args.src_image.h = src->height;
-		args.src_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.src_image.format = VDPFORMAT_TO_G2DFORMAT(src->format);
 		args.src_image.pixel_seq = G2D_SEQ_NORMAL;
 		args.src_rect.x = src_rect->x0;
 		args.src_rect.y = src_rect->y0;
@@ -303,12 +312,15 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 		args.dst_image.addr[0] = ve_virt2phys(dest->data) + DRAM_OFFSET;
 		args.dst_image.w = dest->width;
 		args.dst_image.h = dest->height;
-		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
+		args.dst_image.format = VDPFORMAT_TO_G2DFORMAT(dest->format);
 		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
 		args.dst_x = dest_rect->x0;
 		args.dst_y = dest_rect->y0;
+		if (dest->flags & RGBA_FLAG_NEEDS_CLEAR)
+			args.flag |= G2D_BLT_NONE;
+		else
+			args.flag |= G2D_BLT_PIXEL_ALPHA;
 		args.color = 0;
-		args.alpha = 0;
 
 		ioctl(dest->device->g2d_fd, G2D_CMD_BITBLT, &args);
 	}
@@ -318,8 +330,8 @@ void rgba_flush(rgba_surface_t *rgba)
 {
 	if (rgba->flags & RGBA_FLAG_NEEDS_FLUSH)
 	{
-		ve_flush_cache(rgba->data + rgba->dirty.y0 * rgba->width * 4,
-				(rgba->dirty.y1 - rgba->dirty.y0) * rgba->width * 4);
+		ve_flush_cache(rgba->data + rgba->dirty.y0 * rgba->width * GET_BPP_FROM_FORMAT(rgba->format),
+				(rgba->dirty.y1 - rgba->dirty.y0) * rgba->width * GET_BPP_FROM_FORMAT(rgba->format));
 		rgba->flags &= ~RGBA_FLAG_NEEDS_FLUSH;
 	}
 }
