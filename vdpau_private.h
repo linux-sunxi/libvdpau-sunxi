@@ -123,9 +123,14 @@ typedef struct
 	float saturation;
 	float hue;
 	int deinterlace;
+	int deint_supported;
 	int start_stream;
 	int custom_csc;
 	VdpCSCMatrix csc_matrix;
+	VdpChromaType chroma_type;
+	int video_width;
+	int video_height;
+	int layers;
 } mixer_ctx_t;
 
 /* Flags for rgba surface */
