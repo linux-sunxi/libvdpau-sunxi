@@ -78,6 +78,7 @@ typedef struct video_surface_ctx_struct
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 	int start_flag;
+	VdpColor background;
 } video_surface_ctx_t;
 
 typedef struct decoder_ctx_struct
@@ -131,6 +132,8 @@ typedef struct
 	int video_width;
 	int video_height;
 	int layers;
+	VdpColor background;
+	int bg_change;
 } mixer_ctx_t;
 
 /* Flags for rgba surface */
@@ -159,6 +162,7 @@ typedef struct
 	yuv_data_t *yuv;
 	VdpRect video_src_rect, video_dst_rect;
 	int csc_change;
+	int bg_change;
 	uint32_t rgba_cnt;
 	float brightness;
 	float contrast;

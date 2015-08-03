@@ -71,6 +71,10 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 	mix->contrast = 1.0;
 	mix->saturation = 1.0;
 	mix->hue = 0.0;
+	mix->background.red = 0.0;
+	mix->background.green = 0.0;
+	mix->background.blue = 0.0;
+	mix->background.alpha = 1.0;
 
 	/* CSC: Use BT601 at initalization time */
 	mix->custom_csc = 0;
@@ -225,10 +229,15 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	}
 
 	os->csc_change = mix->csc_change;
+	os->bg_change = mix->bg_change;
 	os->brightness = mix->brightness;
 	os->contrast = mix->contrast;
 	os->saturation = mix->saturation;
 	os->hue = mix->hue;
+	os->vs->background.red = mix->background.red;
+	os->vs->background.green = mix->background.green;
+	os->vs->background.blue = mix->background.blue;
+	os->vs->background.alpha = mix->background.alpha;
 
 	/*
 	 * If we don't do this, we possibly overwrite os->vs->start_flag with a second video_mixer_render
@@ -238,6 +247,7 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 		os->vs->start_flag = mix->start_stream;
 	mix->start_stream = 0;
 	mix->csc_change = 0;
+	mix->bg_change = 0;
 
 	if ((mix->device->flags & DEVICE_FLAG_OSD) && (os->rgba.flags & RGBA_FLAG_DIRTY))
 		os->rgba.flags |= RGBA_FLAG_NEEDS_CLEAR;
@@ -470,6 +480,8 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
                                                VdpVideoMixerAttribute const *attributes,
                                                void const *const *attribute_values)
 {
+	const VdpColor *bgcolor;
+
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
 
@@ -493,6 +505,13 @@ VdpStatus vdp_video_mixer_set_attribute_values(VdpVideoMixer mixer,
 				set_csc_matrix(mix, color_standard);
 				break;
 			case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
+				bgcolor = attribute_values[i];
+				mix->background.red = bgcolor->red;
+				mix->background.green = bgcolor->green;
+				mix->background.blue = bgcolor->blue;
+				mix->background.alpha = bgcolor->alpha;
+				mix->bg_change = 1;
+				break;
 			case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
 			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
 			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
@@ -552,7 +571,8 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
 {
 	int i;
 	VdpCSCMatrix **vdp_csc;
-	
+	VdpColor *bgcolor;
+
 	if (!attributes || !attribute_values)
 		return VDP_STATUS_INVALID_POINTER;
 
@@ -571,6 +591,9 @@ VdpStatus vdp_video_mixer_get_attribute_values(VdpVideoMixer mixer,
 					memcpy(*vdp_csc, mix->csc_matrix, sizeof(VdpCSCMatrix));
 				break;
 			case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
+				bgcolor = attribute_values[i];
+				memcpy(bgcolor, &mix->background, sizeof(VdpColor));
+				break;
 			case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
 			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
 			case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:
@@ -699,9 +722,9 @@ VdpStatus vdp_video_mixer_query_attribute_support(VdpDevice device,
 	switch (attribute)
 	{
 		case VDP_VIDEO_MIXER_ATTRIBUTE_CSC_MATRIX:
+		case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
 			*is_supported = VDP_TRUE;
 			break;
-		case VDP_VIDEO_MIXER_ATTRIBUTE_BACKGROUND_COLOR:
 		case VDP_VIDEO_MIXER_ATTRIBUTE_NOISE_REDUCTION_LEVEL:
 		case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MIN_LUMA:
 		case VDP_VIDEO_MIXER_ATTRIBUTE_LUMA_KEY_MAX_LUMA:

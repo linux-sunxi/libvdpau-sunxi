@@ -404,6 +404,28 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			last_id++;
 		}
 
+		if (os->bg_change)
+		{
+			__disp_color_t background;
+			memset(&background, 0, sizeof(__disp_color_t));
+
+			/* range is 0~255 */
+			background.red = os->vs->background.red * 255.0;
+			background.green = os->vs->background.green * 255.0;
+			background.blue = os->vs->background.blue * 255.0;
+			/* alpha isn't used in display sun7i driver according to user manual */
+			background.alpha = os->vs->background.alpha * 255.0;
+
+			args[2] = (unsigned long)(&background);
+			ioctl(q->target->fd, DISP_CMD_SET_BKCOLOR, args);
+
+			VDPAU_LOG(LINFO, ">red: %d, green: %d, blue: %d, alpha: %d",
+			          background.red, background.green,
+			          background.blue, background.alpha);
+
+			os->bg_change = 0;
+		}
+
 		/*
 		 * Note: might be more reliable (but slower and problematic when there
 		 * are driver issues and the GET functions return wrong values) to query the
