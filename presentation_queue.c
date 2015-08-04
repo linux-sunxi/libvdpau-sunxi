@@ -36,8 +36,6 @@
 static pthread_t presentation_thread_id;
 static QUEUE *Queue;
 
-static VdpTime frame_time;
-
 typedef struct task
 {
 	struct timespec		when;
@@ -153,11 +151,6 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 	queue_ctx_t *q = task->queue;
 	output_surface_ctx_t *os = task->surface;
 
-	/* do the VSync, if enabled */
-	if (wait_for_vsync(q->device))
-		VDPAU_LOG(LWARN, "VSync failed");
-	frame_time = get_time();
-
 	uint32_t clip_width = task->clip_width;
 	uint32_t clip_height = task->clip_height;
 
@@ -238,7 +231,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			}
 			q->target->drawable_unmap = 2;
 		}
-		return VDP_STATUS_OK;
+		goto noosd;
 	}
 
 	if (q->target->drawable_change)
@@ -476,7 +469,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 
 	/* OSD is disabled, so skip OSD displaying. */
 	if (!(q->device->flags & DEVICE_FLAG_OSD))
-		return VDP_STATUS_OK;
+		goto noosd;
 
 	/*
 	 * Display the OSD layer
@@ -571,6 +564,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		os->rgba.flags &= ~RGBA_FLAG_LAYEROPEN;
 	}
 
+noosd:
 	return VDP_STATUS_OK;
 }
 
@@ -580,9 +574,11 @@ static void *presentation_thread(void *param)
 
 	smart device_ctx_t *dev = (device_ctx_t *)param;
 
-	output_surface_ctx_t *os_cur = NULL;
 	output_surface_ctx_t *os_prev = NULL;
-	output_surface_ctx_t *os_pprev = NULL;
+	output_surface_ctx_t *os_cur = NULL;
+
+	VdpTime timeaftervsync;
+	timeaftervsync = 0;
 
 	int restart = 1;
 
@@ -598,44 +594,48 @@ static void *presentation_thread(void *param)
 					os_cur = NULL;
 					sfree(os_prev);
 					os_prev = NULL;
-					sfree(os_pprev);
-					os_pprev = NULL;
 					dev->flags |= DEVICE_FLAG_EXIT;
 					VDPAU_LOG(LDBG, "Wipeout task received, ending presentation thread ...");
 				}
 				else
 				{
+					/* Rotate the surfaces (previous becomes current) */
+					sfree(os_prev);
+					os_prev = os_cur;
+
 					os_cur = sref(task->surface);
 					if (!os_cur)
 						VDPAU_LOG(LERR, "Error getting surface");
 
+					/* Trigger display init, if the video rect size has changed */
+					if (os_prev && os_cur)
+						if ((rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect)) ||
+						    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
+						{
+							VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
+							restart = 1;
+						}
+
+					/*
+					 * Main part: display the task, meaning:
+					 * push the frame to the address and then wait for the vsync
+					 */
 					do_presentation_queue_display(task, restart);
 
+					/* do the VSync, if enabled */
+					if (wait_for_vsync(dev))
+						VDPAU_LOG(LWARN, "VSync failed");
+					timeaftervsync = get_time();
+
+					/* Set the status flags */
+					/* This is the actually displayed surface */
+					os_cur->first_presentation_time = timeaftervsync;
+					os_cur->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+
+					if (os_prev) /* This is the previously displayed surface */
+						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+
 					restart = 0;
-
-					/* Rotate the surfaces and set the status flags */
-					if (os_prev) /* This is the actually displayed surface */
-					{
-						os_prev->first_presentation_time = frame_time;
-						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
-					}
-
-					/* Trigger display init, if the video rect size has changed */
-					if ((rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect)) ||
-					    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
-					{
-						VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
-						restart = 1;
-					}
-
-					if (os_pprev) /* This is the previously displayed surface */
-						os_pprev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
-
-					sfree(os_pprev);
-					os_pprev = os_prev;
-					sfree(os_prev);
-					os_prev = os_cur;
-
 				}
 				sfree(task->surface);
 				sfree(task->queue);
