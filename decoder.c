@@ -18,6 +18,7 @@
  */
 
 #include <string.h>
+#include <inttypes.h>
 #include "vdpau_private.h"
 #include "ve.h"
 
@@ -118,6 +119,9 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
                              uint32_t bitstream_buffer_count,
                              VdpBitstreamBuffer const *bitstream_buffers)
 {
+	VdpTime timein, timeout;
+	VdpStatus ret;
+
 	smart decoder_ctx_t *dec = handle_get(decoder);
 	if (!dec)
 		return VDP_STATUS_INVALID_HANDLE;
@@ -125,6 +129,8 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 	smart video_surface_ctx_t *vid = handle_get(target);
 	if (!vid)
 		return VDP_STATUS_INVALID_HANDLE;
+
+	timein = get_vdp_time();
 
 	vid->source_format = INTERNAL_YCBCR_FORMAT;
 	unsigned int i, pos = 0;
@@ -136,7 +142,12 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 	}
 	ve_flush_cache(dec->data, pos);
 
-	return dec->decode(dec, picture_info, pos, vid);
+	ret = dec->decode(dec, picture_info, pos, vid);
+
+	timeout = get_vdp_time();
+	VDPAU_TIME(LDEC, "Decoder time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
+
+	return ret;
 }
 
 VdpStatus vdp_decoder_query_capabilities(VdpDevice device,

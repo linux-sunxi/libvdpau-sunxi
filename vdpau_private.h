@@ -25,7 +25,9 @@
 #define DRAM_OFFSET (0x40000000)
 
 #define DEBUG
-#define DEBUG_LEVEL LINFO
+#define DEBUG_LEVEL LERR
+#define DEBUG_TIME
+#define DEBUG_LEVEL_TIME LDEC
 
 /*
  * Set this to 1 if you want csc conversion to the full range 0~255 (TV use)
@@ -217,6 +219,7 @@ void set_csc_matrix(mixer_ctx_t *mix, VdpColorStandard standard);
 
 typedef uint32_t VdpHandle;
 typedef float csc_m[3][4];
+VdpTime get_vdp_time(void);
 
 __attribute__((malloc)) void *handle_alloc(size_t size, f_destructor destructor);
 VdpStatus handle_create(VdpHandle *handle, void *data);

@@ -20,18 +20,30 @@
 #ifndef __VDPAU_LOG_H__
 #define __VDPAU_LOG_H__
 
+#include <stdio.h>
+
 #define LFATAL	(1)
 #define LERR	(2)
 #define LWARN	(3)
 #define LINFO	(4)
 #define LDBG	(5)
 
-#ifdef DEBUG
 #ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL LDBG
 #endif
-#include <stdio.h>
 
+#define LSURF1	(1)
+#define LPQ1	(2)
+#define LSURF2	(3)
+#define LPQ2	(4)
+#define LDEC	(5)
+#define LTALL	(6)
+
+#ifndef DEBUG_LEVEL_TIME
+#define DEBUG_LEVEL LTALL
+#endif
+
+#ifdef DEBUG
 #define VDPAU_LOG(level, ...) do { \
 				if (level <= DEBUG_LEVEL) \
 				{ \
@@ -63,4 +75,37 @@
 #else
 #define VDPAU_LOG(level, ...)
 #endif
+
+#ifdef DEBUG_TIME
+#define VDPAU_TIME(level, ...) do { \
+				if (level <= DEBUG_LEVEL_TIME) \
+				{ \
+				fprintf(stderr, "[VDPAU"); \
+					switch (level) { \
+					case LPQ1: \
+					case LPQ2: \
+					    fprintf(stderr, " TIME.PQ.] "); \
+					    break; \
+					case LSURF1: \
+					case LSURF2: \
+					    fprintf(stderr, " TIME.SU.] "); \
+					    break; \
+					case LDEC: \
+					    fprintf(stderr, " TIME.DE.] "); \
+					    break; \
+					case LTALL: \
+					    fprintf(stderr, " TIME....] "); \
+					    break; \
+					default: \
+					    fprintf(stderr, "        ] "); \
+					    break; \
+					} \
+				fprintf(stderr, __VA_ARGS__); \
+				fprintf(stderr, "\n"); \
+				} \
+			} while (0)
+#else
+#define VDPAU_TIME(level, ...)
+#endif
+
 #endif

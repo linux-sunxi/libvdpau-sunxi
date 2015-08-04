@@ -19,6 +19,7 @@
 
 #include <string.h>
 #include <sys/ioctl.h>
+#include <inttypes.h>
 #include "vdpau_private.h"
 #include "ve.h"
 #include "g2d_driver.h"
@@ -125,8 +126,12 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
                                uint32_t const *source_pitches,
                                VdpRect const *destination_rect)
 {
+	VdpTime timein, timeout;
+
 	if (!(rgba->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
+
+	timein = get_vdp_time();
 
 	VdpRect d_rect = {0, 0, rgba->width, rgba->height};
 	if (destination_rect)
@@ -162,6 +167,9 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 	rgba->flags &= ~RGBA_FLAG_RENDERED;
 	rgba->id++;
 
+	timeout = get_vdp_time();
+	VDPAU_TIME(LSURF1, "PutBitsNative time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
+
 	return VDP_STATUS_OK;
 }
 
@@ -173,11 +181,15 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
                                 VdpColorTableFormat color_table_format,
                                 void const *color_table)
 {
+	VdpTime timein, timeout;
+
 	if (color_table_format != VDP_COLOR_TABLE_FORMAT_B8G8R8X8)
 		return VDP_STATUS_INVALID_COLOR_TABLE_FORMAT;
 
 	if (!(rgba->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
+
+	timein = get_vdp_time();
 
 	int x, y;
 	const uint32_t *colormap = color_table;
@@ -225,6 +237,9 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	rgba->flags &= ~RGBA_FLAG_RENDERED;
 	rgba->id++;
 
+	timeout = get_vdp_time();
+	VDPAU_TIME(LSURF1, "PutBitsIndexed time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
+
 	return VDP_STATUS_OK;
 }
 
@@ -236,8 +251,12 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
                               VdpOutputSurfaceRenderBlendState const *blend_state,
                               uint32_t flags)
 {
+	VdpTime timein, timeout;
+
 	if (!(dest->device->flags & DEVICE_FLAG_OSD))
 		return VDP_STATUS_OK;
+
+	timein = get_vdp_time();
 
 	if (colors || flags)
 		VDPAU_LOG(LINFO, "%s: colors and flags not implemented!", __func__);
@@ -270,6 +289,9 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	dest->flags |= RGBA_FLAG_DIRTY;
 	dirty_add_rect(&dest->dirty, &d_rect);
 
+	timeout = get_vdp_time();
+	VDPAU_TIME(LSURF1, "RenderSurface time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
+
 	return VDP_STATUS_OK;
 }
 
@@ -289,11 +311,13 @@ void rgba_clear(rgba_surface_t *rgba)
 void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 {
 	g2d_fillrect args;
+	VdpTime timein, timeout;
+
+	timein = get_vdp_time();
 
 	if (dest->device->flags & DEVICE_FLAG_OSD)
 	{
 		rgba_flush(dest);
-
 		args.flag = 0;
 		args.dst_image.addr[0] = ve_virt2phys(dest->data) + DRAM_OFFSET;
 		args.dst_image.w = dest->width;
@@ -319,11 +343,16 @@ void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 
 		ioctl(dest->device->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
+	timeout = get_vdp_time();
+	VDPAU_TIME(LSURF2, "Filling time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
 }
 
 void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *src, const VdpRect *src_rect)
 {
 	g2d_blt args;
+	VdpTime timein, timeout;
+
+	timein = get_vdp_time();
 
 	if (dest->device->flags & DEVICE_FLAG_OSD)
 	{
@@ -355,6 +384,8 @@ void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *s
 
 		ioctl(dest->device->g2d_fd, G2D_CMD_BITBLT, &args);
 	}
+	timeout = get_vdp_time();
+	VDPAU_TIME(LSURF2, "Blitting time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
 }
 
 void rgba_flush(rgba_surface_t *rgba)

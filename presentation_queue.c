@@ -38,7 +38,7 @@ static QUEUE *Queue;
 
 typedef struct task
 {
-	struct timespec		when;
+	VdpTime			when;
 	uint32_t		clip_width;
 	uint32_t		clip_height;
 	output_surface_ctx_t	*surface;
@@ -46,7 +46,7 @@ typedef struct task
 	uint32_t		wipeout;
 } task_t;
 
-static VdpTime get_time(void)
+VdpTime get_vdp_time(void)
 {
 	struct timespec tp;
 
@@ -54,15 +54,6 @@ static VdpTime get_time(void)
 		return 0;
 
 	return (uint64_t)tp.tv_sec * 1000000000ULL + (uint64_t)tp.tv_nsec;
-}
-
-static struct timespec
-vdptime2timespec(VdpTime t)
-{
-	struct timespec res;
-	res.tv_sec = t / (1000*1000*1000);
-	res.tv_nsec = t % (1000*1000*1000);
-	return res;
 }
 
 static void cleanup_presentation_queue_target(void *ptr, void *meta)
@@ -126,7 +117,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		return VDP_STATUS_INVALID_HANDLE;
 
 	task_t *task = (task_t *)calloc(1, sizeof(task_t));
-	task->when = vdptime2timespec(earliest_presentation_time);
+	task->when = earliest_presentation_time;
 	task->clip_width = clip_width;
 	task->clip_height = clip_height;
 	task->surface = sref(os);
@@ -577,8 +568,9 @@ static void *presentation_thread(void *param)
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_cur = NULL;
 
-	VdpTime timeaftervsync;
+	VdpTime timein, timebeforevsync, timeaftervsync, oldvsync;
 	timeaftervsync = 0;
+	oldvsync = 0;
 
 	int restart = 1;
 
@@ -588,6 +580,8 @@ static void *presentation_thread(void *param)
 			task_t *task;
 			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
 			{
+				timein = get_vdp_time();
+
 				if (task->wipeout) /* Got the wipeout task */
 				{
 					sfree(os_cur);
@@ -622,18 +616,34 @@ static void *presentation_thread(void *param)
 					 */
 					do_presentation_queue_display(task, restart);
 
+					timebeforevsync = get_vdp_time();
 					/* do the VSync, if enabled */
 					if (wait_for_vsync(dev))
 						VDPAU_LOG(LWARN, "VSync failed");
-					timeaftervsync = get_time();
+					timeaftervsync = get_vdp_time();
 
-					/* Set the status flags */
+					/* Set the status flags after the vsync was done */
+
 					/* This is the actually displayed surface */
 					os_cur->first_presentation_time = timeaftervsync;
 					os_cur->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
 
-					if (os_prev) /* This is the previously displayed surface */
+					/* This is the previously displayed surface */
+					if (os_prev)
 						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+
+					/*
+					 * Check, if the time difference between two VSync is < 10ms, so something must be wrong
+					 * this causes missed frames messages in softhddevice 
+					 */
+					if ((((timeaftervsync - timein) / 1000) < 10000) && oldvsync)
+						VDPAU_TIME(LPQ2, "PQ time difference: in>vsync %" PRIu64 ", vsync>out %" PRIu64 ", in>out %" PRIu64 ", vsync>vsync%" PRIu64 " <- TOO SHORT!",
+						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
+					else if (oldvsync)
+						VDPAU_TIME(LPQ2, "PQ time difference: in>vsync %" PRIu64 ", vsync>out %" PRIu64 ", in>out %" PRIu64 ", vsync>vsync%" PRIu64 "",
+						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
+
+					oldvsync = timeaftervsync;
 
 					restart = 0;
 				}
@@ -852,7 +862,7 @@ VdpStatus vdp_presentation_queue_get_time(VdpPresentationQueue presentation_queu
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	*current_time = get_time();
+	*current_time = get_vdp_time();
 	return VDP_STATUS_OK;
 }
 
