@@ -152,7 +152,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 	 */
 	int i = 0;
 
-	VDPAU_LOG(LDBG, "QueueLength: %d", XEventsQueued(q->device->display, QueuedAlready));
+	VDPAU_LOG(LALL, "QueueLength: %d", XEventsQueued(q->device->display, QueuedAlready));
 
 	while (XPending(q->device->display) && i++<20)
 	{

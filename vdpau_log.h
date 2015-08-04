@@ -27,6 +27,7 @@
 #define LWARN	(3)
 #define LINFO	(4)
 #define LDBG	(5)
+#define LALL	(6)
 
 #ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL LDBG
@@ -63,6 +64,9 @@
 					    break; \
 					case LDBG: \
 					    fprintf(stderr, " DEBUG  ] "); \
+					    break; \
+					case LALL: \
+					    fprintf(stderr, " ALL    ] "); \
 					    break; \
 					default: \
 					    fprintf(stderr, "        ] "); \

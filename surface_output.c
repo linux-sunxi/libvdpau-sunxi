@@ -269,7 +269,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 
 	if ((out->rgba_cnt != in->rgba.id) || !(in->rgba.flags & RGBA_FLAG_RENDERED))
 	{
-		VDPAU_LOG(LDBG, "rgba surface changed!");
+		VDPAU_LOG(LDBG, "rgba output surface changed!");
 		ret = rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
 					colors, blend_state, flags);
 		out->prev_rgba = out->rgba;
@@ -279,7 +279,7 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
 	}
 	else
 	{
-		VDPAU_LOG(LDBG, "rgba surface unchanged!");
+		VDPAU_LOG(LALL, "rgba output surface unchanged!");
 		out->rgba = out->prev_rgba;
 		ret = VDP_STATUS_OK;
 	}
@@ -313,7 +313,7 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 
 	if ((out->rgba_cnt != in->rgba.id) || !(in->rgba.flags & RGBA_FLAG_RENDERED))
 	{
-		VDPAU_LOG(LDBG, "rgba surface changed!");
+		VDPAU_LOG(LDBG, "rgba bitmap surface changed!");
 		ret = rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
 					colors, blend_state, flags);
 		out->prev_rgba = out->rgba;
@@ -323,7 +323,7 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
 	}
 	else
 	{
-		VDPAU_LOG(LDBG, "rgba surface unchanged!");
+		VDPAU_LOG(LALL, "rgba bitmap surface unchanged!");
 		out->rgba = out->prev_rgba;
 		ret = VDP_STATUS_OK;
 	}
