@@ -568,10 +568,12 @@ static void *presentation_thread(void *param)
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_cur = NULL;
 
-	VdpTime timein, timebeforevsync, timeaftervsync, oldvsync;
-	timeaftervsync = 0;
+	VdpTime timeaftervsync = 0;
+	int timer;
+#ifdef DEBUG_TIME
+	VdpTime timein, timemid, timeout, timebeforevsync, oldvsync;
 	oldvsync = 0;
-
+#endif
 	int restart = 1;
 
 	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
@@ -580,8 +582,9 @@ static void *presentation_thread(void *param)
 			task_t *task;
 			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
 			{
+#ifdef DEBUG_TIME
 				timein = get_vdp_time();
-
+#endif
 				if (task->wipeout) /* Got the wipeout task */
 				{
 					sfree(os_cur);
@@ -590,6 +593,9 @@ static void *presentation_thread(void *param)
 					os_prev = NULL;
 					dev->flags |= DEVICE_FLAG_EXIT;
 					VDPAU_LOG(LDBG, "Wipeout task received, ending presentation thread ...");
+#ifdef DEBUG_TIME
+					oldvsync = 0; /* time debugging workaraound */
+#endif
 				}
 				else
 				{
@@ -609,14 +615,17 @@ static void *presentation_thread(void *param)
 							VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
 							restart = 1;
 						}
-
+#ifdef DEBUG_TIME
+					timemid = get_vdp_time();
+#endif
 					/*
 					 * Main part: display the task, meaning:
 					 * push the frame to the address and then wait for the vsync
 					 */
 					do_presentation_queue_display(task, restart);
-
+#ifdef DEBUG_TIME
 					timebeforevsync = get_vdp_time();
+#endif
 					/* do the VSync, if enabled */
 					if (wait_for_vsync(dev))
 						VDPAU_LOG(LWARN, "VSync failed");
@@ -636,6 +645,7 @@ static void *presentation_thread(void *param)
 					 * Check, if the time difference between two VSync is < 10ms, so something must be wrong
 					 * this causes missed frames messages in softhddevice 
 					 */
+#ifdef DEBUG_TIME
 					if ((((timeaftervsync - timein) / 1000) < 10000) && oldvsync)
 						VDPAU_TIME(LPQ2, "PQ time difference: in>vsync %" PRIu64 ", vsync>out %" PRIu64 ", in>out %" PRIu64 ", vsync>vsync%" PRIu64 " <- TOO SHORT!",
 						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
@@ -644,21 +654,38 @@ static void *presentation_thread(void *param)
 						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
 
 					oldvsync = timeaftervsync;
-
+#endif
 					restart = 0;
 				}
 				sfree(task->surface);
 				sfree(task->queue);
 				free(task);
+#ifdef DEBUG_TIME
+				timeout = get_vdp_time();
+				/*
+				 * We do some time debugging ...
+				 */
+				if (oldvsync)
+					VDPAU_TIME(LPQ2, "PQ time diff: i>d %" PRIu64 ", d>vb %" PRIu64 ", vb>va %" PRIu64 ", va>o %" PRIu64 ", i>o %" PRIu64 ", v>v %" PRIu64 "",
+					          ((timemid - timein) / 1000), ((timebeforevsync - timemid) / 1000), ((timeaftervsync - timebeforevsync) / 1000),
+						  ((timeout - timeaftervsync) / 1000), ((timeout - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
+				oldvsync = timeaftervsync;
+#endif
 			}
 			else /* This should never happen! */
+			{
 				VDPAU_LOG(LERR, "Error getting task");
+			}
 		}
 		/* We have no queue or surface in the queue, so simply wait some period of time (find a suitable value!)
 		 * Otherwise, while is doing a race, that it can't win.
 		 */
 		else
-			usleep(1000);
+		{
+			timer = 1000;
+			VDPAU_LOG(LDBG, "Nothing in the queue, sleeping for %d ns", timer);
+			usleep(timer);
+		}
 	}
 	return NULL;
 }

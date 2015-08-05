@@ -119,7 +119,9 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
                              uint32_t bitstream_buffer_count,
                              VdpBitstreamBuffer const *bitstream_buffers)
 {
+#ifdef DEBUG_TIME
 	VdpTime timein, timeout;
+#endif
 	VdpStatus ret;
 
 	smart decoder_ctx_t *dec = handle_get(decoder);
@@ -130,7 +132,9 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 	if (!vid)
 		return VDP_STATUS_INVALID_HANDLE;
 
+#ifdef DEBUG_TIME
 	timein = get_vdp_time();
+#endif
 
 	vid->source_format = INTERNAL_YCBCR_FORMAT;
 	unsigned int i, pos = 0;
@@ -144,7 +148,9 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 
 	ret = dec->decode(dec, picture_info, pos, vid);
 
+#ifdef DEBUG_TIME
 	timeout = get_vdp_time();
+#endif
 	VDPAU_TIME(LDEC, "Decoder time difference in>out: %" PRIu64 "", ((timeout - timein) / 1000));
 
 	return ret;
