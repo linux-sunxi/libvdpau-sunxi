@@ -43,7 +43,7 @@ typedef struct task
 	uint32_t		clip_height;
 	output_surface_ctx_t	*surface;
 	queue_ctx_t		*queue;
-	uint32_t		wipeout;
+	uint32_t		control;
 } task_t;
 
 VdpTime get_vdp_time(void)
@@ -54,6 +54,32 @@ VdpTime get_vdp_time(void)
 		return 0;
 
 	return (uint64_t)tp.tv_sec * 1000000000ULL + (uint64_t)tp.tv_nsec;
+}
+
+/*
+ * Use this function, to trigger some events in the presentation thread:
+ * This pushes a task to the queue, that controls the workflow within the queue
+ * in the display routine.
+ * The following values are possible:
+ *   flag = CONTROL_END_THREAD -> clear surfaces, end thread, clear queue
+ *   flag = CONTROL_REINIT_DISPLAY -> clear surfaces, restart display engine
+ *   flag = CONTROL_DISABLE_VIDEO -> disable video layer
+ * return 0 if success
+ */
+int thread_control(uint32_t flag)
+{
+	VDPAU_LOG(LINFO, "Control flag received: %d", flag);
+	task_t *task = (task_t *)calloc(1, sizeof(task_t));
+	task->control = flag;
+
+	if(q_push_tail(Queue, task))
+	{
+		VDPAU_LOG(LERR, "Error inserting control task!");
+		free(task);
+		return 1;
+	}
+
+	return 0;
 }
 
 static void cleanup_presentation_queue_target(void *ptr, void *meta)
@@ -102,6 +128,18 @@ static int rect_changed(VdpRect rect1, VdpRect rect2)
 	return 0;
 }
 
+static int video_surface_changed(video_surface_ctx_t *vs1, video_surface_ctx_t *vs2)
+{
+	if (vs1 && vs2)
+	if ((vs1->height != vs2->height) ||
+	    (vs1->width != vs2->width) ||
+	    (vs1->chroma_type != vs2->chroma_type) ||
+	    (vs1->source_format != vs2->source_format))
+		return 1;
+
+	return 0;
+}
+
 VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue,
                                          VdpOutputSurface surface,
                                          uint32_t clip_width,
@@ -122,7 +160,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->clip_height = clip_height;
 	task->surface = sref(os);
 	task->queue = sref(q);
-	task->wipeout = 0;
+	task->control = CONTROL_NULL;
 	os->first_presentation_time = 0;
 	os->status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
 
@@ -137,8 +175,9 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	return VDP_STATUS_OK;
 }
 
-static VdpStatus do_presentation_queue_display(task_t *task, int restart)
+static VdpStatus do_presentation_queue_display(task_t *task)
 {
+	uint32_t init_display = task->control;
 	queue_ctx_t *q = task->queue;
 	output_surface_ctx_t *os = task->surface;
 
@@ -159,7 +198,6 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		XEvent ev;
 		XNextEvent(q->device->display, &ev);
 
-
 		VDPAU_LOG(LDBG, "Received the following XEvent: %s", event_names[ev.type]);
 
 		switch(ev.type) {
@@ -170,7 +208,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		case UnmapNotify:
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 1;
-			q->target->start_flag = 0;
+			init_display = CONTROL_NULL;
 			VDPAU_LOG(LINFO, "Processing UnmapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		/*
@@ -180,7 +218,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		case MapNotify:
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 0;
-			q->target->start_flag = 1;
+			init_display = CONTROL_REINIT_DISPLAY;
 			os->rgba.flags |= RGBA_FLAG_CHANGED;
 			VDPAU_LOG(LINFO, "Processing MapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
@@ -199,6 +237,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 				q->target->drawable_width = ev.xconfigure.width;
 				q->target->drawable_height = ev.xconfigure.height;
 				q->target->drawable_change = 1;
+				init_display = CONTROL_REINIT_DISPLAY;
 				os->rgba.flags |= RGBA_FLAG_CHANGED;
 			}
 			VDPAU_LOG(LINFO, "Processing ConfigureNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
@@ -222,7 +261,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			}
 			q->target->drawable_unmap = 2;
 		}
-		goto noosd;
+		goto skip_osd;
 	}
 
 	if (q->target->drawable_change)
@@ -233,49 +272,25 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		      0, 0, &q->target->x, &q->target->y, &dummy);
 		XClearWindow(q->device->display, q->target->drawable);
 
-		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-		__disp_rect_t scn_win, src_win;
-
-		/* Get scn window dimension and position */
-		scn_win.x = q->target->x + os->video_dst_rect.x0;
-		scn_win.y = q->target->y + os->video_dst_rect.y0;
-		scn_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
-		scn_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
-
-		/* Get src window dimension and position */
-		src_win.x = os->video_src_rect.x0;
-		src_win.y = os->video_src_rect.y0;
-		src_win.width = os->video_src_rect.x1 - os->video_src_rect.x0;
-		src_win.height = os->video_src_rect.y1 - os->video_src_rect.y0;
-
-		/* Do the y cutoff (due to a bug in sunxi disp driver) */
-		if (scn_win.y < 0)
-		{
-			int cutoff = -scn_win.y;
-			src_win.y += cutoff;
-			src_win.height -= cutoff;
-			scn_win.y = 0;
-			scn_win.height -= cutoff;
-		}
-
-		/* Reset window dimension and position */
-		args[2] = (unsigned long)(&scn_win);
-		ioctl(q->target->fd, DISP_CMD_LAYER_SET_SCN_WINDOW, args);
-		args[2] = (unsigned long)(&src_win);
-		ioctl(q->target->fd, DISP_CMD_LAYER_SET_SRC_WINDOW, args);
-
 		q->target->drawable_change = 0;
 	}
 
 	/*
 	 * Display the VIDEO layer
 	 */
+	if (init_display == CONTROL_DISABLE_VIDEO)
+	{
+		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
+		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+		goto skip_video;
+	}
+
 	if (os->vs)
 	{
 		static int last_id;
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 
-		if (os->vs->start_flag == 1 || q->target->start_flag == 1 || restart == 1)
+		if (init_display == CONTROL_REINIT_DISPLAY)
 		{
 			last_id = -1; /* Reset the video.id */
 
@@ -348,10 +363,6 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 			args[2] = 0;
 			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
 			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
-
-			/* Initial run is done, only set video.addr[] in the next runs */
-			os->vs->start_flag = 0;
-			q->target->start_flag = 0;
 		}
 		else
 		{
@@ -458,9 +469,10 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
 	}
 
+skip_video:
 	/* OSD is disabled, so skip OSD displaying. */
 	if (!(q->device->flags & DEVICE_FLAG_OSD))
-		goto noosd;
+		goto skip_osd;
 
 	/*
 	 * Display the OSD layer
@@ -555,7 +567,7 @@ static VdpStatus do_presentation_queue_display(task_t *task, int restart)
 		os->rgba.flags &= ~RGBA_FLAG_LAYEROPEN;
 	}
 
-noosd:
+skip_osd:
 	return VDP_STATUS_OK;
 }
 
@@ -572,10 +584,10 @@ static void *presentation_thread(void *param)
 	int timer;
 #ifdef DEBUG_TIME
 	VdpTime timein, timemid, timeout, timebeforevsync, oldvsync;
+	timemid = 0;
+	timebeforevsync = 0;
 	oldvsync = 0;
 #endif
-	int restart = 1;
-
 	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
 		if(Queue && !q_isEmpty(Queue)) /* We have a task in the queue to display */
 		{
@@ -585,19 +597,28 @@ static void *presentation_thread(void *param)
 #ifdef DEBUG_TIME
 				timein = get_vdp_time();
 #endif
-				if (task->wipeout) /* Got the wipeout task */
-				{
-					sfree(os_cur);
-					os_cur = NULL;
-					sfree(os_prev);
-					os_prev = NULL;
-					dev->flags |= DEVICE_FLAG_EXIT;
-					VDPAU_LOG(LDBG, "Wipeout task received, ending presentation thread ...");
-#ifdef DEBUG_TIME
-					oldvsync = 0; /* time debugging workaraound */
-#endif
+				/* Got a control flag */
+				switch (task->control) {
+					case CONTROL_REINIT_DISPLAY:
+						VDPAU_LOG(LINFO, "Control task received, restarting display engine ...");
+						break;
+					case CONTROL_DISABLE_VIDEO:
+						VDPAU_LOG(LINFO, "Control task received, disable video picture ...");
+						break;
+					case CONTROL_END_THREAD:
+						sfree(os_cur);
+						os_cur = NULL;
+						sfree(os_prev);
+						os_prev = NULL;
+						dev->flags |= DEVICE_FLAG_EXIT;
+						VDPAU_LOG(LINFO, "Control task received, ending presentation thread ...");
+						break;
+					case CONTROL_NULL:
+					default:
+						break;
 				}
-				else
+
+				if (task->control < CONTROL_END_THREAD)
 				{
 					/* Rotate the surfaces (previous becomes current) */
 					sfree(os_prev);
@@ -613,8 +634,24 @@ static void *presentation_thread(void *param)
 						    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
 						{
 							VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
-							restart = 1;
+							task->control = CONTROL_REINIT_DISPLAY;
 						}
+
+					/* Trigger display init, if the video surface has changed */
+					if (os_prev && os_cur)
+						if ((video_surface_changed(os_cur->vs, os_prev->vs)))
+						{
+							VDPAU_LOG(LINFO, "Video surface changed, init triggered.");
+							task->control = CONTROL_REINIT_DISPLAY;
+						}
+
+					/* Trigger display init, if the video surface is the first frame after video mixer was created */
+					if (os_cur->vs && os_cur->vs->first_frame)
+					{
+						VDPAU_LOG(LINFO, "Received first video surface, init triggered.");
+						task->control = CONTROL_REINIT_DISPLAY;
+						os_cur->vs->first_frame = 0;
+					}
 #ifdef DEBUG_TIME
 					timemid = get_vdp_time();
 #endif
@@ -622,7 +659,7 @@ static void *presentation_thread(void *param)
 					 * Main part: display the task, meaning:
 					 * push the frame to the address and then wait for the vsync
 					 */
-					do_presentation_queue_display(task, restart);
+					do_presentation_queue_display(task);
 #ifdef DEBUG_TIME
 					timebeforevsync = get_vdp_time();
 #endif
@@ -640,23 +677,8 @@ static void *presentation_thread(void *param)
 					/* This is the previously displayed surface */
 					if (os_prev)
 						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
-
-					/*
-					 * Check, if the time difference between two VSync is < 10ms, so something must be wrong
-					 * this causes missed frames messages in softhddevice 
-					 */
-#ifdef DEBUG_TIME
-					if ((((timeaftervsync - timein) / 1000) < 10000) && oldvsync)
-						VDPAU_TIME(LPQ2, "PQ time difference: in>vsync %" PRIu64 ", vsync>out %" PRIu64 ", in>out %" PRIu64 ", vsync>vsync%" PRIu64 " <- TOO SHORT!",
-						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
-					else if (oldvsync)
-						VDPAU_TIME(LPQ2, "PQ time difference: in>vsync %" PRIu64 ", vsync>out %" PRIu64 ", in>out %" PRIu64 ", vsync>vsync%" PRIu64 "",
-						          ((timebeforevsync - timein) / 1000), ((timeaftervsync - timebeforevsync) / 1000), ((timeaftervsync - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
-
-					oldvsync = timeaftervsync;
-#endif
-					restart = 0;
 				}
+
 				sfree(task->surface);
 				sfree(task->queue);
 				free(task);
@@ -747,7 +769,6 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 
 	VDPAU_LOG(LINFO, "Creating target");
 
-	qt->start_flag = 1;
 	qt->drawable_change = 0;
 	qt->drawable_unmap = 0;
 	qt->drawable_x = 0;
@@ -826,16 +847,7 @@ VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue
 
 	VDPAU_LOG(LINFO, "Destroying queue");
 
-	task_t *task = (task_t *)calloc(1, sizeof(task_t));
-	task->wipeout = 1;
-
-	if(!q_push_tail(Queue, task))
-		VDPAU_LOG(LDBG, "Inserting wipe task");
-	else
-	{
-		VDPAU_LOG(LDBG, "Error inserting wipe task");
-		free(task);
-	}
+	thread_control(CONTROL_END_THREAD);
 
 	pthread_join(presentation_thread_id, NULL);
 	q->device->flags &= ~DEVICE_FLAG_THREAD;

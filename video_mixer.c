@@ -64,7 +64,6 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 		return VDP_STATUS_RESOURCES;
 
 	mix->device = sref(dev);
-	mix->start_stream = 1;
 
 	/* Attributes */
 	mix->brightness = 0.0;
@@ -161,6 +160,9 @@ VdpStatus vdp_video_mixer_create(VdpDevice device,
 		return ret;
 	}
 
+	/* mark starting stream, needed to set the first appearing surface */
+	mix->start_stream = 1;
+
 	return handle_create(mixer, mix);
 }
 
@@ -239,13 +241,11 @@ VdpStatus vdp_video_mixer_render(VdpVideoMixer mixer,
 	os->vs->background.blue = mix->background.blue;
 	os->vs->background.alpha = mix->background.alpha;
 
-	/*
-	 * If we don't do this, we possibly overwrite os->vs->start_flag with a second video_mixer_render
-	 * and the presentation routine will never be restarted.
-	 */
-	if (!os->vs->start_flag)
-		os->vs->start_flag = mix->start_stream;
-	mix->start_stream = 0;
+	/* mark the the os->vs, as the first one */
+	if (!os->vs->first_frame)
+		os->vs->first_frame = mix->start_stream;
+	mix->start_stream = 0; /* stream started, reset mixer flag */
+
 	mix->csc_change = 0;
 	mix->bg_change = 0;
 

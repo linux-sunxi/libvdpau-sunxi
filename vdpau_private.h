@@ -80,8 +80,8 @@ typedef struct video_surface_ctx_struct
 	int luma_size;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
-	int start_flag;
 	VdpColor background;
+	int first_frame;
 } video_surface_ctx_t;
 
 typedef struct decoder_ctx_struct
@@ -102,7 +102,6 @@ typedef struct
 	int layer;
 	int layer_top;
 	int x, y;
-	int start_flag;
 	int drawable_change;
 	int drawable_unmap;
 	int drawable_x;
@@ -121,6 +120,7 @@ typedef struct
 typedef struct
 {
 	device_ctx_t *device;
+	int start_stream;
 	int csc_change;
 	float brightness;
 	float contrast;
@@ -128,7 +128,6 @@ typedef struct
 	float hue;
 	int deinterlace;
 	int deint_supported;
-	int start_stream;
 	int custom_csc;
 	VdpCSCMatrix csc_matrix;
 	VdpChromaType chroma_type;
@@ -220,6 +219,13 @@ void set_csc_matrix(mixer_ctx_t *mix, VdpColorStandard standard);
 typedef uint32_t VdpHandle;
 typedef float csc_m[3][4];
 VdpTime get_vdp_time(void);
+
+/* Flags for thread control */
+#define CONTROL_NULL			0
+#define CONTROL_REINIT_DISPLAY		1
+#define CONTROL_DISABLE_VIDEO		2
+#define CONTROL_END_THREAD		3
+int thread_control(uint32_t flag);
 
 __attribute__((malloc)) void *handle_alloc(size_t size, f_destructor destructor);
 VdpStatus handle_create(VdpHandle *handle, void *data);
