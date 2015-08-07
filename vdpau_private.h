@@ -52,6 +52,8 @@
 #define DEVICE_FLAG_VSYNC (1 << 2)
 #define DEVICE_FLAG_THREAD (1 << 3)
 #define DEVICE_FLAG_EXIT (1 << 4)
+#define DEVICE_FLAG_VLAYEROPEN (1 << 5)
+#define DEVICE_FLAG_RLAYEROPEN (1 << 6)
 
 typedef struct
 {
@@ -144,7 +146,6 @@ typedef struct
 #define RGBA_FLAG_NEEDS_CLEAR (1 << 2)
 #define RGBA_FLAG_CHANGED (1 << 3)
 #define RGBA_FLAG_RENDERED (1 << 4)
-#define RGBA_FLAG_LAYEROPEN (1 << 5)
 
 typedef struct
 {

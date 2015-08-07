@@ -131,10 +131,13 @@ static int rect_changed(VdpRect rect1, VdpRect rect2)
 static int video_surface_changed(video_surface_ctx_t *vs1, video_surface_ctx_t *vs2)
 {
 	if (vs1 && vs2)
-	if ((vs1->height != vs2->height) ||
-	    (vs1->width != vs2->width) ||
-	    (vs1->chroma_type != vs2->chroma_type) ||
-	    (vs1->source_format != vs2->source_format))
+		if ((vs1->height != vs2->height) ||
+		    (vs1->width != vs2->width) ||
+		    (vs1->chroma_type != vs2->chroma_type) ||
+		    (vs1->source_format != vs2->source_format))
+			return 1;
+
+	if ((!vs1 && vs2) || (vs1 && !vs2))
 		return 1;
 
 	return 0;
@@ -248,9 +251,9 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		}
 	}
 
-	if (q->target->drawable_unmap) /* Window was unmapped: Close both layers */
+	if (q->target->drawable_unmap) /* Window was (1) or is (2) already unmapped */
 	{
-		if (q->target->drawable_unmap == 1) /* Window was or is already unmapped: Close both layers */
+		if (q->target->drawable_unmap == 1) /* Window was unmapped: Close both layers */
 		{
 			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
@@ -278,10 +281,11 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	/*
 	 * Display the VIDEO layer
 	 */
-	if (init_display == CONTROL_DISABLE_VIDEO)
+	if (init_display == CONTROL_DISABLE_VIDEO && q->device->flags & DEVICE_FLAG_VLAYEROPEN)
 	{
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+		q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
 		goto skip_video;
 	}
 
@@ -360,8 +364,13 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			args[2] = (unsigned long)(&layer_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
 
-			args[2] = 0;
-			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+			if (!(q->device->flags & DEVICE_FLAG_VLAYEROPEN))
+			{
+				args[2] = 0;
+				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+			}
+
 			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
 		}
 		else
@@ -397,6 +406,13 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 			ioctl(q->target->fd, DISP_CMD_VIDEO_SET_FB, args);
 			last_id++;
+
+			if (!(q->device->flags & DEVICE_FLAG_VLAYEROPEN))
+			{
+				args[2] = 0;
+				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+			}
 		}
 
 		if (os->bg_change)
@@ -465,8 +481,12 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	}
 	else /* No video surface present. Close the layer. */
 	{
-		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+		if (q->device->flags & DEVICE_FLAG_VLAYEROPEN)
+		{
+			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
+			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+			q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+		}
 	}
 
 skip_video:
@@ -523,14 +543,6 @@ skip_video:
 
 			args[2] = (unsigned long)(&layer_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
-
-			if (!(os->rgba.flags & RGBA_FLAG_LAYEROPEN))
-			{
-				args[2] = 0;
-				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
-				os->rgba.flags |= RGBA_FLAG_LAYEROPEN;
-			}
-
 			os->rgba.flags &= ~RGBA_FLAG_CHANGED;
 		}
 		else
@@ -559,12 +571,22 @@ skip_video:
 			args[2] = (unsigned long)(&fb_info);
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args);
 		}
+
+		if (!(q->device->flags & DEVICE_FLAG_RLAYEROPEN))
+		{
+			args[2] = 0;
+			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+			q->device->flags |= DEVICE_FLAG_RLAYEROPEN;
+		}
 	}
 	else
 	{
-		uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-		os->rgba.flags &= ~RGBA_FLAG_LAYEROPEN;
+		if (q->device->flags & DEVICE_FLAG_RLAYEROPEN)
+		{
+			uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
+			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+			q->device->flags &= ~DEVICE_FLAG_RLAYEROPEN;
+		}
 	}
 
 skip_osd:
@@ -646,7 +668,7 @@ static void *presentation_thread(void *param)
 						}
 
 					/* Trigger display init, if the video surface is the first frame after video mixer was created */
-					if (os_cur->vs && os_cur->vs->first_frame)
+					if (os_cur->vs && (os_cur->vs->first_frame))
 					{
 						VDPAU_LOG(LINFO, "Received first video surface, init triggered.");
 						task->control = CONTROL_REINIT_DISPLAY;
@@ -676,7 +698,15 @@ static void *presentation_thread(void *param)
 
 					/* This is the previously displayed surface */
 					if (os_prev)
+					{
+						if (os_prev->yuv)
+							yuv_unref(os_prev->yuv);
+						os_prev->yuv = NULL;
+						sfree(os_prev->vs);
+						os_prev->vs = NULL;
+
 						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+					}
 				}
 
 				sfree(task->surface);
