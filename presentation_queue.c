@@ -285,6 +285,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	{
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+		VDPAU_LOG(LINFO, "Video Layer closed.");
 		q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
 		goto skip_video;
 	}
@@ -368,6 +369,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			{
 				args[2] = 0;
 				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+				VDPAU_LOG(LINFO, "Video Layer opened.");
 				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
 			}
 
@@ -411,6 +413,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			{
 				args[2] = 0;
 				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+				VDPAU_LOG(LINFO, "Video Layer opened.");
 				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
 			}
 		}
@@ -485,6 +488,7 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		{
 			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
 			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+			VDPAU_LOG(LINFO, "Video Layer closed.");
 			q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
 		}
 	}
@@ -576,6 +580,7 @@ skip_video:
 		{
 			args[2] = 0;
 			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
+			VDPAU_LOG(LINFO, "OSD Layer opened.");
 			q->device->flags |= DEVICE_FLAG_RLAYEROPEN;
 		}
 	}
@@ -585,6 +590,7 @@ skip_video:
 		{
 			uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
 			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+			VDPAU_LOG(LINFO, "OSD Layer closed.");
 			q->device->flags &= ~DEVICE_FLAG_RLAYEROPEN;
 		}
 	}

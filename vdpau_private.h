@@ -25,8 +25,8 @@
 #define DRAM_OFFSET (0x40000000)
 
 #define DEBUG
-#define DEBUG_LEVEL LERR
-#define DEBUG_TIME
+#define DEBUG_LEVEL LINFO
+// #define DEBUG_TIME
 #define DEBUG_LEVEL_TIME LDEC
 
 /*
