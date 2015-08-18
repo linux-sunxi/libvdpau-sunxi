@@ -430,8 +430,10 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			/* alpha isn't used in display sun7i driver according to user manual */
 			background.alpha = os->vs->background.alpha * 255.0;
 
-			args[2] = (unsigned long)(&background);
+			args[1] = (unsigned long)(&background);
+			args[2] = 0;
 			ioctl(q->target->fd, DISP_CMD_SET_BKCOLOR, args);
+			args[1] = q->target->layer;
 
 			VDPAU_LOG(LINFO, ">red: %d, green: %d, blue: %d, alpha: %d",
 			          background.red, background.green,
