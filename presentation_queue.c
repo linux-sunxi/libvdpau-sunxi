@@ -108,10 +108,37 @@ static void cleanup_presentation_queue_target(void *ptr, void *meta)
 		close(target->fd);
 }
 
-static VdpStatus wait_for_vsync(device_ctx_t *dev)
+#ifdef USE_KVSYNC
+static uint64_t get_last_vsync(queue_target_ctx_t *qt)
+{
+	uint32_t args[4] = { 0, 0, 0, 0};
+	uint64_t vsync;
+	memset(&vsync, 0, sizeof(uint64_t));
+	args[1] = (unsigned long)(&vsync);
+
+	if (!(qt->device->flags & DEVICE_FLAG_VSYNC))
+		return get_vdp_time();
+
+	if (ioctl(qt->fd, DISP_CMD_VSYNC_GET, args) < 0)
+		return -1;
+
+	return vsync;
+}
+
+static uint32_t enable_vsync(queue_target_ctx_t *qt)
+{
+	uint32_t args[4] = { 0, 1, 0, 0};
+	if (qt->device->flags & DEVICE_FLAG_VSYNC)
+		ioctl(qt->fd, DISP_CMD_VSYNC_EVENT_EN, args);
+
+	return 0;
+}
+#endif
+
+static VdpStatus wait_for_vsync(queue_target_ctx_t *qt)
 {
 	/* do the VSync */
-	if ((dev->flags & DEVICE_FLAG_VSYNC) && ioctl(dev->fb_fd, FBIO_WAITFORVSYNC, 0))
+	if ((qt->device->flags & DEVICE_FLAG_VSYNC) && ioctl(qt->device->fb_fd, FBIO_WAITFORVSYNC, 0))
 		return VDP_STATUS_ERROR;
 
 	return VDP_STATUS_OK;
@@ -668,13 +695,23 @@ static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-	smart device_ctx_t *dev = (device_ctx_t *)param;
+	smart queue_target_ctx_t *qt = (queue_target_ctx_t *)param;
 
 	output_surface_ctx_t *os_prev = NULL;
 	output_surface_ctx_t *os_cur = NULL;
 
-	VdpTime timeaftervsync = 0;
 	int processed;
+#ifdef USE_KVSYNC
+	uint64_t lastvsync = get_last_vsync(qt);
+#ifdef DEBUG_TIME
+	uint64_t oldvsync = lastvsync;
+	int skipped = 0;
+	VdpTime start, stop;
+	start = 0;
+	stop = 0;
+#endif
+#else
+	VdpTime lastvsync = 0;
 #ifdef DEBUG_TIME
 	int skipped = 0;
 	VdpTime start, stop, oldvsync;
@@ -682,11 +719,12 @@ static void *presentation_thread(void *param)
 	stop = 0;
 	oldvsync = 0;
 #endif
+#endif
 	/* Initially fill the queue with MAX_SURFACES, wait for max. 2s */
 	rebuild_buffer(MAX_SURFACES, 1 * 1000, 2 * 1000 * 1000);
 	VDPAU_LOG(LINFO, "Queue initially filled with %d tasks", q_length(Queue));
 
-	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
+	while (!(qt->device->flags & DEVICE_FLAG_EXIT)) {
 		if (Queue)
 		{
 			VDPAU_LOG(LALL, "Queue length %d", q_length(Queue));
@@ -714,7 +752,7 @@ static void *presentation_thread(void *param)
 						break;
 					case CONTROL_END_THREAD:
 						VDPAU_LOG(LINFO, "Control task received, ending presentation thread ...");
-						dev->flags |= DEVICE_FLAG_EXIT;
+						qt->device->flags |= DEVICE_FLAG_EXIT;
 						sfree(os_cur);
 						os_cur = NULL;
 						sfree(os_prev);
@@ -776,16 +814,19 @@ static void *presentation_thread(void *param)
 #endif
 
 				/* Wait for the next VSync, and get the timestamp */
-				if (wait_for_vsync(dev))
+				if (wait_for_vsync(qt))
 					VDPAU_LOG(LWARN, "VSync failed");
-				timeaftervsync = get_vdp_time();
-
+#ifdef USE_KVSYNC
+				lastvsync = get_last_vsync(qt);
+#else
+				lastvsync = get_vdp_time();
+#endif
 				/* Set the status flags after the vsync was done */
 				/* This is the actually displayed surface */
 				if (os_cur)
 				{
 					if (os_cur->first_presentation_time == 0)
-						os_cur->first_presentation_time = timeaftervsync;
+						os_cur->first_presentation_time = lastvsync;
 					os_cur->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
 				}
 
@@ -821,11 +862,11 @@ static void *presentation_thread(void *param)
 			/*
 			 * We do some time debugging ...
 			 */
-			if (oldvsync && (((timeaftervsync - oldvsync) / 1000) > 21 * 1000)) /* Only correct for 50Hz */
+			if (oldvsync && (((lastvsync - oldvsync) / 1000) > 21 * 1000)) /* Only correct for 50Hz */
 				VDPAU_TIME(LPQ2, "VSync diff: %" PRIu64 ", (%" PRIu64 ", %" PRIu64 ", %" PRIu64 "), q_len %d, skipped: %d",
-				          ((timeaftervsync - oldvsync) / 1000), (timeaftervsync / 1000), (oldvsync / 1000),
+				          ((lastvsync - oldvsync) / 1000), (lastvsync / 1000), (lastvsync / 1000),
 					  ((stop - start) / 1000), q_length(Queue), skipped++);
-			oldvsync = timeaftervsync;
+			oldvsync = lastvsync;
 #endif
 			if (!processed)
 				usleep(1000);
@@ -895,6 +936,8 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 
 	VDPAU_LOG(LINFO, "Creating target");
 
+	qt->device = sref(dev);
+
 	qt->drawable_change = 0;
 	qt->drawable_unmap = 0;
 	qt->drawable_x = 0;
@@ -952,13 +995,18 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	q->target = sref(qt);
 	q->device = sref(dev);
 
+#ifdef USE_KVSYNC
+	/* Enable kernel vsync */
+	enable_vsync(qt);
+#endif
+
 	/* initialize queue and launch presentation thread */
 	if (!Queue)
 		Queue = q_queue_init();
 
 	if (!(dev->flags & DEVICE_FLAG_THREAD)) {
 		dev->flags &= ~DEVICE_FLAG_EXIT;
-		pthread_create(&presentation_thread_id, NULL, presentation_thread, sref(dev));
+		pthread_create(&presentation_thread_id, NULL, presentation_thread, sref(qt));
 		dev->flags |= DEVICE_FLAG_THREAD;
 	}
 

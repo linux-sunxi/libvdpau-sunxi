@@ -47,6 +47,12 @@
  */
 #define MAX_SURFACES (3)
 
+/*
+ * Set this, if you want to use the kernel vsync time.
+ * This needs some new kernel ioctls and therefore a patched kernel.
+ */
+//#define USE_KVSYNC 1
+
 #include <stdlib.h>
 #include <pthread.h>
 #include <csptr/smart_ptr.h>
@@ -112,6 +118,7 @@ typedef struct decoder_ctx_struct
 typedef struct
 {
 	Drawable drawable;
+	device_ctx_t *device;
 	int fd;
 	int layer;
 	int layer_top;

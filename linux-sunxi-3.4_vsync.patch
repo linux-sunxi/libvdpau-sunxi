@@ -1,0 +1,184 @@
+From 13f5e350d89994d7b41ba878126f08a9b7babf4f Mon Sep 17 00:00:00 2001
+From: Andreas Baierl <ichgeh@imkreisrum.de>
+Date: Thu, 20 Aug 2015 08:59:45 -0400
+Subject: [PATCH] arm:sunxi:disp: Add vsync timestamp set by kernel.
+
+Introduce ioctl DISP_CMD_VSYNC_GET to get timestamp of the last VSync from kernel time.
+Functionality must be enabled with new ioctl DISP_CMD_VSYNC_EVENT_EN
+
+Signed-off-by: Andreas Baierl <ichgeh@imkreisrum.de>
+---
+ drivers/video/sunxi/disp/bsp_display.h  |  3 +++
+ drivers/video/sunxi/disp/dev_disp.c     | 18 ++++++++++++++++++
+ drivers/video/sunxi/disp/dev_disp.h     |  1 +
+ drivers/video/sunxi/disp/dev_fb.c       | 15 +++++++++++++++
+ drivers/video/sunxi/disp/dev_fb.h       |  1 +
+ drivers/video/sunxi/disp/disp_display.h |  2 ++
+ drivers/video/sunxi/disp/disp_event.c   | 12 ++++++++++++
+ include/video/sunxi_disp_ioctl.h        |  2 ++
+ 8 files changed, 54 insertions(+)
+
+diff --git a/drivers/video/sunxi/disp/bsp_display.h b/drivers/video/sunxi/disp/bsp_display.h
+index 22dae74..e61e2df 100644
+--- a/drivers/video/sunxi/disp/bsp_display.h
++++ b/drivers/video/sunxi/disp/bsp_display.h
+@@ -84,6 +84,7 @@ typedef struct {
+ 	 __s32(*hdmi_get_HPD_status) (void);
+ 	 __s32(*hdmi_set_pll) (__u32 pll, __u32 clk);
+ 	 __s32(*disp_int_process) (__u32 sel);
++	 __s32(*vsync_event) (__u32 sel);
+ } __disp_bsp_init_para;
+ 
+ extern __s32 BSP_disp_clk_on(__u32 type);
+@@ -124,6 +125,8 @@ extern __s32 BSP_disp_set_screen_size(__u32 sel, __disp_rectsz_t *size);
+ extern __s32 BSP_disp_set_output_csc(__u32 sel, __disp_output_type_t type,
+ 				     __u32 drc_en);
+ extern __s32 BSP_disp_de_flicker_enable(__u32 sel, __bool b_en);
++extern __s32 BSP_disp_vsync_event_enable(__u32 sel, __bool enable);
++extern __s64 BSP_disp_vsync_get(__u32 sel);
+ extern __s32 BSP_disp_layer_request(__u32 sel, __disp_layer_work_mode_t mode);
+ extern __s32 BSP_disp_layer_release(__u32 sel, __u32 hid);
+ extern __s32 BSP_disp_layer_open(__u32 sel, __u32 hid);
+diff --git a/drivers/video/sunxi/disp/dev_disp.c b/drivers/video/sunxi/disp/dev_disp.c
+index 9b59810..bec0137 100644
+--- a/drivers/video/sunxi/disp/dev_disp.c
++++ b/drivers/video/sunxi/disp/dev_disp.c
+@@ -304,6 +304,7 @@ __s32 DRV_DISP_Init(void)
+ 	para.base_pioc = (__u32) g_fbi.base_pioc;
+ 	para.base_pwm = (__u32) g_fbi.base_pwm;
+ 	para.disp_int_process = DRV_disp_int_process;
++	para.vsync_event = DRV_disp_vsync_event;
+ 
+ 	memset(&g_disp_drv, 0, sizeof(struct __disp_drv_t));
+ 
+@@ -928,6 +929,23 @@ static long disp_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+ 			break;
+ 		}
+ 
++	case DISP_CMD_VSYNC_EVENT_EN:
++		ret = BSP_disp_vsync_event_enable(ubuffer[0], ubuffer[1]);
++		break;
++
++	case DISP_CMD_VSYNC_GET:
++		{
++			__s64 timestamp;
++
++			timestamp = BSP_disp_vsync_get(ubuffer[0]);
++			if (copy_to_user((void __user *)ubuffer[1], &timestamp,
++					 sizeof(__s64))) {
++				__wrn("copy_to_user fail\n");
++				return -EFAULT;
++			}
++			break;
++		}
++
+ 	/* ----layer---- */
+ 	case DISP_CMD_LAYER_REQUEST:
+ 		ret = BSP_disp_layer_request(ubuffer[0],
+diff --git a/drivers/video/sunxi/disp/dev_disp.h b/drivers/video/sunxi/disp/dev_disp.h
+index f181097..b9a57f3 100644
+--- a/drivers/video/sunxi/disp/dev_disp.h
++++ b/drivers/video/sunxi/disp/dev_disp.h
+@@ -30,6 +30,7 @@ void *disp_malloc(__u32 num_bytes);
+ void disp_free(void *p);
+ 
+ __s32 DRV_disp_int_process(__u32 sel);
++__s32 DRV_disp_vsync_event(__u32 sel);
+ 
+ __s32 DRV_DISP_Init(void);
+ __s32 DRV_DISP_Exit(void);
+diff --git a/drivers/video/sunxi/disp/dev_fb.c b/drivers/video/sunxi/disp/dev_fb.c
+index a453b6f..227855c 100644
+--- a/drivers/video/sunxi/disp/dev_fb.c
++++ b/drivers/video/sunxi/disp/dev_fb.c
+@@ -1336,6 +1336,21 @@ __s32 DRV_disp_int_process(__u32 sel)
+ 	return 0;
+ }
+ 
++__s32 DRV_disp_vsync_event(__u32 sel)
++{
++	g_fbi.vsync_timestamp[sel] = ktime_get();
++
++	return 0;
++}
++
++__s64 BSP_disp_vsync_get(__u32 sel)
++{
++	if (gdisp.screen[sel].vsync_event_en)
++		return ktime_to_ns(g_fbi.vsync_timestamp[sel]);
++
++	return -1;
++}
++
+ #ifdef CONFIG_FB_SUNXI_UMP
+ int (*disp_get_ump_secure_id) (struct fb_info *info, fb_info_t *g_fbi,
+ 			       unsigned long arg, int buf);
+diff --git a/drivers/video/sunxi/disp/dev_fb.h b/drivers/video/sunxi/disp/dev_fb.h
+index 4245661..0f6d27b 100644
+--- a/drivers/video/sunxi/disp/dev_fb.h
++++ b/drivers/video/sunxi/disp/dev_fb.h
+@@ -59,6 +59,7 @@ typedef struct {
+ #endif
+ 	/* screen_base address, allocated with disp_malloc() */
+ 	void *malloc_screen_base[SUNXI_MAX_FB];
++	ktime_t vsync_timestamp[2];
+ } fb_info_t;
+ 
+ extern fb_info_t g_fbi;
+diff --git a/drivers/video/sunxi/disp/disp_display.h b/drivers/video/sunxi/disp/disp_display.h
+index 6c6ed80..9706f4d 100644
+--- a/drivers/video/sunxi/disp/disp_display.h
++++ b/drivers/video/sunxi/disp/disp_display.h
+@@ -139,6 +139,8 @@ typedef struct {
+ 
+ 	__disp_lcd_cfg_t lcd_cfg;
+ 	__hdle gpio_hdl[4];
++
++	__bool vsync_event_en;
+ } __disp_screen_t;
+ 
+ typedef struct {
+diff --git a/drivers/video/sunxi/disp/disp_event.c b/drivers/video/sunxi/disp/disp_event.c
+index 1b0f9f4..1959a57 100644
+--- a/drivers/video/sunxi/disp/disp_event.c
++++ b/drivers/video/sunxi/disp/disp_event.c
+@@ -50,11 +50,23 @@ __s32 BSP_disp_cfg_finish(__u32 sel)
+ 	return DIS_SUCCESS;
+ }
+ 
++__s32 BSP_disp_vsync_event_enable(__u32 sel, __bool enable)
++{
++	gdisp.screen[sel].vsync_event_en = enable;
++
++	return DIS_SUCCESS;
++}
++
+ void LCD_vbi_event_proc(__u32 sel, __u32 tcon_index)
+ {
+ 	__u32 cur_line = 0, start_delay = 0;
+ 	__u32 i = 0;
+ 
++	if (gdisp.screen[sel].vsync_event_en && gdisp.init_para.vsync_event)
++	{
++		gdisp.init_para.vsync_event(sel);
++	}
++
+ 	Video_Operation_In_Vblanking(sel, tcon_index);
+ 
+ 	cur_line = LCDC_get_cur_line(sel, tcon_index);
+diff --git a/include/video/sunxi_disp_ioctl.h b/include/video/sunxi_disp_ioctl.h
+index 5ba03b2..a073ab6 100644
+--- a/include/video/sunxi_disp_ioctl.h
++++ b/include/video/sunxi_disp_ioctl.h
+@@ -694,6 +694,8 @@ typedef enum tag_DISP_CMD {
+ 	DISP_CMD_DRC_SET_WINDOW = 0x28,
+ 	DISP_CMD_DRC_ON = 0x29,
+ 	DISP_CMD_GET_DE_FLICKER_EN = 0x2a,
++	DISP_CMD_VSYNC_EVENT_EN = 0x2b,
++	DISP_CMD_VSYNC_GET = 0x2c,
+ 
+ 	/* ----layer---- */
+ 	DISP_CMD_LAYER_REQUEST = 0x40,
+-- 
+2.5.0
+

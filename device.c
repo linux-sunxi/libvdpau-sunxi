@@ -57,21 +57,15 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 		return VDP_STATUS_ERROR;
 	}
 
-	/* Check for disabled VSync */
-	const char *env_vdpau_vsync = getenv("VDPAU_VSYNC");
-	if (env_vdpau_vsync && strncmp(env_vdpau_vsync, "0", 1) == 0)
-		VDPAU_LOG(LINFO, "VSync disabled.");
-	else
+	/* Enable VSync */
+	dev->fb_fd = open("/dev/fb0", O_RDWR);
+	if (dev->fb_fd != -1)
 	{
-		dev->fb_fd = open("/dev/fb0", O_RDWR);
-		if (dev->fb_fd != -1)
-		{
-			dev->flags |= DEVICE_FLAG_VSYNC;
-			VDPAU_LOG(LINFO, "VSync enabled");
-		}
-		else
-			VDPAU_LOG(LWARN, "Failed to open /dev/fb0! VSync disabled.");
+		dev->flags |= DEVICE_FLAG_VSYNC;
+		VDPAU_LOG(LINFO, "VSync enabled");
 	}
+	else
+		VDPAU_LOG(LWARN, "Failed to open /dev/fb0! VSync disabled.");
 
 	/* Check for disabled OSD */
 	const char *env_vdpau_osd = getenv("VDPAU_OSD");
