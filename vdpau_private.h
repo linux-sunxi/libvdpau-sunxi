@@ -36,6 +36,17 @@
 #define CSC_FULL_RANGE 1
 //#define GRAB /* Uncomment this to try experimental get_bits_native support */
 
+/*
+ * VDR (softhddevice) uses 4 surfaces and
+ * MPV uses 3 surfaces by default
+ * for internal buffering in the application.
+ * You can increase it in mpv with -vo=vdpau:max_surfaces=4
+ * MAX_SURFACES is the number of surfaces which is used
+ * as a buffer in libvdpau. It must be equal or lower than
+ * the values set in the application.
+ */
+#define MAX_SURFACES (3)
+
 #include <stdlib.h>
 #include <csptr/smart_ptr.h>
 #include <vdpau/vdpau.h>

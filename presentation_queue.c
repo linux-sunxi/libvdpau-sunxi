@@ -420,23 +420,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 				video.top_field_first = os->video_field ? 0 : 1;
 			}
 
-			args[2] = (unsigned long)(&video);
-			int tmp, i = 0;
-			while ((tmp = ioctl(q->target->fd, DISP_CMD_VIDEO_GET_FRAME_ID, args)) != last_id)
-			{
-				if (tmp == -1)
-					break;
-				VDPAU_LOG(LINFO, "Waiting for frame id ... tmp=%d, last_id=%d", tmp, last_id);
-
-				usleep(1000);
-				if (i++ > 10)
-				{
-					VDPAU_LOG(LWARN, "Waiting for frame id failed");
-					break;
-				}
-			}
-
 			/* Send the new frame to the framebuffer */
+			args[2] = (unsigned long)(&video);
 			if (ioctl(q->target->fd, DISP_CMD_VIDEO_SET_FB, args))
 				VDPAU_LOG(LERR, "DISP_CMD_VIDEO_SET_FB failed");
 			last_id++;
@@ -662,6 +647,23 @@ skip_osd:
 	return VDP_STATUS_OK;
 }
 
+/*
+ * Some dumb, busy loop, that waits for a filled queue,
+ * until max_surfaces is reached or timeout (us) expires.
+ */
+int rebuild_buffer(int max_surfaces, int interval, int timeout)
+{
+	int breakout = 0;
+	while (q_length(Queue) < max_surfaces)
+	{
+		if (timeout && breakout > timeout)
+			return q_length(Queue);
+		usleep(interval);
+		breakout += interval;
+	}
+	return max_surfaces;
+}
+
 static void *presentation_thread(void *param)
 {
 	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
@@ -672,7 +674,7 @@ static void *presentation_thread(void *param)
 	output_surface_ctx_t *os_cur = NULL;
 
 	VdpTime timeaftervsync = 0;
-	int timer;
+	int processed;
 #ifdef DEBUG_TIME
 	int skipped = 0;
 	VdpTime start, stop, oldvsync;
@@ -680,13 +682,29 @@ static void *presentation_thread(void *param)
 	stop = 0;
 	oldvsync = 0;
 #endif
+	/* Initially fill the queue with MAX_SURFACES, wait for max. 2s */
+	rebuild_buffer(MAX_SURFACES, 1 * 1000, 2 * 1000 * 1000);
+	VDPAU_LOG(LINFO, "Queue initially filled with %d tasks", q_length(Queue));
+
 	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
-		if(Queue && !q_isEmpty(Queue)) /* We have a task in the queue to display */
+		if (Queue)
 		{
-			task_t *task;
-			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
+			VDPAU_LOG(LALL, "Queue length %d", q_length(Queue));
+			task_t *task = NULL;
+			processed = 0;
+
+			/*
+			 * We have a task in the queue to display,
+			 * so start the main part of the loop.
+			 * We check, if a display init is needed
+			 * and then push the frame to the framebuffer.
+			 */
+			if (!q_isEmpty(Queue))
 			{
-				/* Got a control flag */
+				/* Remove task from queue */
+				q_pop_head(Queue, (void *)&task);
+
+				/* Check for a control flag */
 				switch (task->control) {
 					case CONTROL_REINIT_DISPLAY:
 						VDPAU_LOG(LINFO, "Control task received, restarting display engine ...");
@@ -695,119 +713,123 @@ static void *presentation_thread(void *param)
 						VDPAU_LOG(LINFO, "Control task received, disable video picture ...");
 						break;
 					case CONTROL_END_THREAD:
+						VDPAU_LOG(LINFO, "Control task received, ending presentation thread ...");
+						dev->flags |= DEVICE_FLAG_EXIT;
 						sfree(os_cur);
 						os_cur = NULL;
 						sfree(os_prev);
 						os_prev = NULL;
-						dev->flags |= DEVICE_FLAG_EXIT;
-						VDPAU_LOG(LINFO, "Control task received, ending presentation thread ...");
-						break;
+						free(task);
+						goto skip_display;
 					case CONTROL_NULL:
 					default:
 						break;
 				}
 
-				if (task->control < CONTROL_END_THREAD)
-				{
-					/* Rotate the surfaces (previous becomes current) */
-					sfree(os_prev);
-					os_prev = os_cur;
+				/* Rotate the surfaces (previous becomes current) */
+				sfree(os_prev);
+				os_prev = os_cur;
+				os_cur = sref(task->surface);
 
-					os_cur = sref(task->surface);
-					if (!os_cur)
-						VDPAU_LOG(LERR, "Error getting surface");
+				if (!os_cur)
+					VDPAU_LOG(LERR, "Error getting surface");
 
-					/* Trigger display init, if the video rect size has changed */
-					if (os_prev && os_cur)
-						if ((rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect)) ||
-						    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
-						{
-							VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
-							task->control = CONTROL_REINIT_DISPLAY;
-						}
-
-					/* Trigger display init, if the video surface has changed */
-					if (os_prev && os_cur)
-						if ((video_surface_changed(os_cur->vs, os_prev->vs)))
-						{
-							VDPAU_LOG(LINFO, "Video surface changed, init triggered.");
-							task->control = CONTROL_REINIT_DISPLAY;
-						}
-
-					/* Trigger display init, if the video surface is the first frame after video mixer was created */
-					if (os_cur->vs && (os_cur->vs->first_frame))
+				/* Compare current and last surface and check if display init must be triggered */
+				/* Trigger display init, if the video rect size has changed */
+				if (os_cur && os_prev)
+					if ((rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect)) ||
+					    (rect_changed(os_cur->video_src_rect, os_prev->video_src_rect)))
 					{
-						VDPAU_LOG(LINFO, "Received first video surface, init triggered.");
+						VDPAU_LOG(LINFO, "Video rect changed, init triggered.");
 						task->control = CONTROL_REINIT_DISPLAY;
-						os_cur->vs->first_frame = 0;
 					}
-#ifdef DEBUG_TIME
-					start = get_vdp_time();
-#endif
-					/*
-					 * Main part: display the task, meaning:
-					 * push the frame to the address and then wait for the vsync
-					 */
-					if (do_presentation_queue_display(task))
-						VDPAU_LOG(LERR, "Something went wrong while displaying ...");
-					else
-						VDPAU_LOG(LDBG, "Processed surface %d", os_cur->id);
-#ifdef DEBUG_TIME
-					stop = get_vdp_time();
-#endif
-					/* do the VSync, if enabled */
-					if (wait_for_vsync(dev))
-						VDPAU_LOG(LWARN, "VSync failed");
-					timeaftervsync = get_vdp_time();
 
-					/* Set the status flags after the vsync was done */
-
-					/* This is the actually displayed surface */
-					os_cur->first_presentation_time = timeaftervsync;
-					os_cur->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
-
-					/* This is the previously displayed surface */
-					if (os_prev)
+				/* Trigger display init, if the video surface has changed */
+				if (os_cur && os_prev)
+					if ((video_surface_changed(os_prev->vs, os_cur->vs)))
 					{
-						if (os_prev->yuv)
-							yuv_unref(os_prev->yuv);
-						os_prev->yuv = NULL;
-						sfree(os_prev->vs);
-						os_prev->vs = NULL;
-
-						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+						VDPAU_LOG(LINFO, "Video surface changed, init triggered.");
+						task->control = CONTROL_REINIT_DISPLAY;
 					}
+
+				/* Trigger display init, if the video surface is the first frame after video mixer was created */
+				if (os_cur->vs && (os_cur->vs->first_frame))
+				{
+					VDPAU_LOG(LINFO, "Received first video surface, init triggered.");
+					task->control = CONTROL_REINIT_DISPLAY;
+					os_cur->vs->first_frame = 0;
 				}
 
+				/*
+				 * Main part: display the task, meaning:
+				 * push the frame to the address and then wait for the vsync
+				 */
+#ifdef DEBUG_TIME
+				start = get_vdp_time();
+#endif
+				if (do_presentation_queue_display(task))
+					VDPAU_LOG(LERR, "Something went wrong while displaying ...");
+				else
+					VDPAU_LOG(LDBG, "Processed surface %d", os_cur->id);
+#ifdef DEBUG_TIME
+				stop = get_vdp_time();
+#endif
+
+				/* Wait for the next VSync, and get the timestamp */
+				if (wait_for_vsync(dev))
+					VDPAU_LOG(LWARN, "VSync failed");
+				timeaftervsync = get_vdp_time();
+
+				/* Set the status flags after the vsync was done */
+				/* This is the actually displayed surface */
+				if (os_cur)
+				{
+					if (os_cur->first_presentation_time == 0)
+						os_cur->first_presentation_time = timeaftervsync;
+					os_cur->status = VDP_PRESENTATION_QUEUE_STATUS_VISIBLE;
+				}
+
+				/* This is the previously displayed surface */
+				if (os_prev)
+				{
+					if (os_prev->yuv)
+						yuv_unref(os_prev->yuv);
+					os_prev->yuv = NULL;
+					sfree(os_prev->vs);
+					os_prev->vs = NULL;
+
+					if (os_prev->status != VDP_PRESENTATION_QUEUE_STATUS_IDLE)
+						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+				}
+
+				processed = 1;
+			}
+
+			/* Free the popped task, if any */
+			if (task)
+			{
 				sfree(task->surface);
 				sfree(task->queue);
 				free(task);
+			}
 #ifdef DEBUG_TIME
-				/*
-				 * We do some time debugging ...
-				 */
-				if (oldvsync && (((timeaftervsync - oldvsync) / 1000) > 21 * 1000)) /* Only correct for 50Hz */
-					VDPAU_TIME(LPQ2, "VSync diff: %" PRIu64 ", (%" PRIu64 ", %" PRIu64 ", %" PRIu64 "), q_len %d, skipped: %d",
-					          ((timeaftervsync - oldvsync) / 1000), (timeaftervsync / 1000), (oldvsync / 1000),
-						  ((stop - start) / 1000), q_length(Queue), skipped++);
-				oldvsync = timeaftervsync;
+			/*
+			 * We do some time debugging ...
+			 */
+			if (oldvsync && (((timeaftervsync - oldvsync) / 1000) > 21 * 1000)) /* Only correct for 50Hz */
+				VDPAU_TIME(LPQ2, "VSync diff: %" PRIu64 ", (%" PRIu64 ", %" PRIu64 ", %" PRIu64 "), q_len %d, skipped: %d",
+				          ((timeaftervsync - oldvsync) / 1000), (timeaftervsync / 1000), (oldvsync / 1000),
+					  ((stop - start) / 1000), q_length(Queue), skipped++);
+			oldvsync = timeaftervsync;
 #endif
-			}
-			else /* This should never happen! */
-			{
-				VDPAU_LOG(LERR, "Error getting task");
-			}
-		}
-		/* We have no queue or surface in the queue, so simply wait some period of time (find a suitable value!)
-		 * Otherwise, while is doing a race, that it can't win.
-		 */
-		else
-		{
-			timer = 1000;
-			VDPAU_LOG(LDBG, "Nothing in the queue, sleeping for %d ns", timer);
-			usleep(timer);
+			if (!processed)
+				usleep(1000);
+skip_display:
+			;
 		}
 	}
+	VDPAU_LOG(LINFO, "Thread ended");
+
 	return NULL;
 }
 
