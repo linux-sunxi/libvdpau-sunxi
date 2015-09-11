@@ -48,6 +48,7 @@
 #define MAX_SURFACES (3)
 
 #include <stdlib.h>
+#include <pthread.h>
 #include <csptr/smart_ptr.h>
 #include <vdpau/vdpau.h>
 #include <vdpau/vdpau_x11.h>
@@ -189,6 +190,8 @@ typedef struct
 	VdpTime first_presentation_time;
 	VdpPresentationQueueStatus status;
 	uint32_t id;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
 	VdpTime start, stop;
 } output_surface_ctx_t;
 

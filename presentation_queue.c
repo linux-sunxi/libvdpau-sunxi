@@ -798,8 +798,13 @@ static void *presentation_thread(void *param)
 					sfree(os_prev->vs);
 					os_prev->vs = NULL;
 
+					pthread_mutex_lock(&os_prev->mutex);
 					if (os_prev->status != VDP_PRESENTATION_QUEUE_STATUS_IDLE)
+					{
 						os_prev->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
+						pthread_cond_signal(&os_prev->cond);
+					}
+					pthread_mutex_unlock(&os_prev->mutex);
 				}
 
 				processed = 1;
@@ -1038,12 +1043,10 @@ VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue p
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	while (os->status != VDP_PRESENTATION_QUEUE_STATUS_IDLE) {
-		usleep(1000);
-		smart output_surface_ctx_t *os = handle_get(surface);
-		if (!os)
-			return VDP_STATUS_INVALID_HANDLE;
-	}
+	pthread_mutex_lock(&os->mutex);
+	if (!(q->device->flags & DEVICE_FLAG_EXIT) && (os->status != VDP_PRESENTATION_QUEUE_STATUS_IDLE))
+		pthread_cond_wait(&os->cond, &os->mutex);
+	pthread_mutex_unlock(&os->mutex);
 
 	*first_presentation_time = os->first_presentation_time;
 
@@ -1063,7 +1066,7 @@ VdpStatus vdp_presentation_queue_query_surface_status(VdpPresentationQueue prese
 	if (!status || !first_presentation_time)
 		return VDP_STATUS_INVALID_POINTER;
 
-		smart queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 

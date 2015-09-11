@@ -39,6 +39,9 @@ static void cleanup_output_surface(void *ptr, void *meta)
 	if (surface->yuv)
 		yuv_unref(surface->yuv);
 
+	pthread_cond_destroy(&surface->cond);
+	pthread_mutex_destroy(&surface->mutex);
+
 	sfree(surface->vs);
 }
 
@@ -66,6 +69,9 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 	out->first_presentation_time = 0;
 	out->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
 	out->rgba_cnt = 0;
+
+	pthread_mutex_init(&out->mutex, NULL);
+	pthread_cond_init(&out->cond, NULL);
 
 	ret = rgba_create(&out->rgba, dev, width, height, rgba_format);
 	if (ret != VDP_STATUS_OK)
