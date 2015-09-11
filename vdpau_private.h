@@ -26,7 +26,7 @@
 
 #define DEBUG
 #define DEBUG_LEVEL LINFO
-// #define DEBUG_TIME
+//#define DEBUG_TIME
 #define DEBUG_LEVEL_TIME LDEC
 
 /*
@@ -177,6 +177,8 @@ typedef struct
 	int video_deinterlace, video_field;
 	VdpTime first_presentation_time;
 	VdpPresentationQueueStatus status;
+	uint32_t id;
+	VdpTime start, stop;
 } output_surface_ctx_t;
 
 typedef struct

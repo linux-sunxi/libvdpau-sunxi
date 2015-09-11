@@ -72,7 +72,7 @@ int thread_control(uint32_t flag)
 	task_t *task = (task_t *)calloc(1, sizeof(task_t));
 	task->control = flag;
 
-	if(q_push_tail(Queue, task))
+	if (q_push_tail(Queue, task))
 	{
 		VDPAU_LOG(LERR, "Error inserting control task!");
 		free(task);
@@ -157,6 +157,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
+	static uint32_t id = 0;
 	task_t *task = (task_t *)calloc(1, sizeof(task_t));
 	task->when = earliest_presentation_time;
 	task->clip_width = clip_width;
@@ -166,6 +167,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->control = CONTROL_NULL;
 	os->first_presentation_time = 0;
 	os->status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
+	os->id = id++;
 
 	if(q_push_tail(Queue, task))
 	{
@@ -175,6 +177,10 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 		free(task);
 	}
 
+#ifdef DEBUG_TIME
+	os->stop = get_vdp_time();
+	VDPAU_LOG(LDBG, "Pushing surface %d at %" PRIu64 ", Diff: %" PRIu64 "", os->id, os->stop, (os->stop - os->start) / 1000);
+#endif
 	return VDP_STATUS_OK;
 }
 
@@ -256,11 +262,24 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		if (q->target->drawable_unmap == 1) /* Window was unmapped: Close both layers */
 		{
 			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args))
+				VDPAU_LOG(LERR, "Video layer close failed");
+			else
+			{
+				VDPAU_LOG(LINFO, "Video layer closed");
+				q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+			}
+
 			if (q->device->flags & DEVICE_FLAG_OSD)
 			{
 				args[1] = q->target->layer_top;
-				ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+				if (ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args))
+					VDPAU_LOG(LERR, "OSD layer close failed");
+				else
+				{
+					VDPAU_LOG(LINFO, "OSD layer closed");
+					q->device->flags &= ~DEVICE_FLAG_RLAYEROPEN;
+				}
 			}
 			q->target->drawable_unmap = 2;
 		}
@@ -284,9 +303,13 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 	if (init_display == CONTROL_DISABLE_VIDEO && q->device->flags & DEVICE_FLAG_VLAYEROPEN)
 	{
 		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-		VDPAU_LOG(LINFO, "Video Layer closed.");
-		q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+		if (ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args))
+			VDPAU_LOG(LERR, "Video layer close failed");
+		else
+		{
+			VDPAU_LOG(LINFO, "Video Layer closed.");
+			q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+		}
 		goto skip_video;
 	}
 
@@ -303,7 +326,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			memset(&layer_info, 0, sizeof(layer_info));
 
 			args[2] = (unsigned long)(&layer_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_PARA failed");
 
 			layer_info.pipe = (q->device->flags & DEVICE_FLAG_OSD) ? 0 : 1;
 			layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
@@ -363,17 +387,23 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			layer_info.fb.addr[2] = ve_virt2phys(os->yuv->data + os->vs->luma_size + os->vs->luma_size / 4) + DRAM_OFFSET;
 
 			args[2] = (unsigned long)(&layer_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_PARA failed");
 
 			if (!(q->device->flags & DEVICE_FLAG_VLAYEROPEN))
 			{
 				args[2] = 0;
-				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
-				VDPAU_LOG(LINFO, "Video Layer opened.");
-				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+				if (ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args))
+					VDPAU_LOG(LERR, "Video Layer open failed");
+				else
+				{
+					VDPAU_LOG(LINFO, "Video Layer opened");
+					q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+				}
 			}
 
-			ioctl(q->target->fd, DISP_CMD_VIDEO_START, args);
+			if (ioctl(q->target->fd, DISP_CMD_VIDEO_START, args))
+				VDPAU_LOG(LERR, "DISP_CMD_VIDEO_START failed");
 		}
 		else
 		{
@@ -406,15 +436,21 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 				}
 			}
 
-			ioctl(q->target->fd, DISP_CMD_VIDEO_SET_FB, args);
+			/* Send the new frame to the framebuffer */
+			if (ioctl(q->target->fd, DISP_CMD_VIDEO_SET_FB, args))
+				VDPAU_LOG(LERR, "DISP_CMD_VIDEO_SET_FB failed");
 			last_id++;
 
 			if (!(q->device->flags & DEVICE_FLAG_VLAYEROPEN))
 			{
 				args[2] = 0;
-				ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
-				VDPAU_LOG(LINFO, "Video Layer opened.");
-				q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+				if (ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args))
+					VDPAU_LOG(LERR, "Video Layer open failed");
+				else
+				{
+					VDPAU_LOG(LINFO, "Video Layer opened");
+					q->device->flags |= DEVICE_FLAG_VLAYEROPEN;
+				}
 			}
 		}
 
@@ -432,7 +468,8 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 
 			args[1] = (unsigned long)(&background);
 			args[2] = 0;
-			ioctl(q->target->fd, DISP_CMD_SET_BKCOLOR, args);
+			if (ioctl(q->target->fd, DISP_CMD_SET_BKCOLOR, args))
+				VDPAU_LOG(LERR, "DISP_CMD_SET_BKCOLOR failed");
 			args[1] = q->target->layer;
 
 			VDPAU_LOG(LINFO, ">red: %d, green: %d, blue: %d, alpha: %d",
@@ -453,31 +490,37 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		{
 			uint32_t b, c, s, h;
 
-			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_OFF, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_ENHANCE_OFF failed");
 
 			/* scale VDPAU: -1.0 ~ 1.0 to SUNXI: 0 ~ 100 */
 			b = args[2] = ((os->brightness + 1.0) * 50.0) + 0.5;
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_BRIGHT, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_BRIGHT failed");
 
 			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
 			if (os->contrast <= 1.0)
 				c = args[2] = (os->contrast * 50.0) + 0.5;
 			else
 				c = args[2] = (50.0 + (os->contrast - 1.0) * 50.0 / 9.0) + 0.5;
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_CONTRAST, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_CONTRAST failed");
 
 			/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
 			if (os->saturation <= 1.0)
 				s = args[2] = (os->saturation * 50.0) + 0.5;
 			else
 				s = args[2] = (50.0 + (os->saturation - 1.0) * 50.0 / 9.0) + 0.5;
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_SATURATION, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_SATURATION failed");
 
 			/* scale VDPAU: -PI ~ PI   to SUNXI: 0 ~ 100 */
 			h = args[2] = (((os->hue / M_PI) + 1.0) * 50.0) + 0.5;
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_HUE failed");
 
-			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_ENHANCE_ON failed");
 
 			VDPAU_LOG(LINFO, "Presentation queue csc change");
 			VDPAU_LOG(LINFO, "display driver -> bright: %d, contrast: %d, saturation: %d, hue: %d", b, c, s, h);
@@ -489,9 +532,13 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 		if (q->device->flags & DEVICE_FLAG_VLAYEROPEN)
 		{
 			uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-			VDPAU_LOG(LINFO, "Video Layer closed.");
-			q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args))
+				VDPAU_LOG(LERR, "Video Layer close failed");
+			else
+			{
+				VDPAU_LOG(LINFO, "Video Layer closed");
+				q->device->flags &= ~DEVICE_FLAG_VLAYEROPEN;
+			}
 		}
 	}
 
@@ -517,7 +564,8 @@ skip_video:
 			memset(&layer_info, 0, sizeof(layer_info));
 
 			args[2] = (unsigned long)(&layer_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_PARA failed");
 
 			layer_info.pipe = 1;
 			layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
@@ -548,7 +596,8 @@ skip_video:
 			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
 
 			args[2] = (unsigned long)(&layer_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_PARA failed");
 			os->rgba.flags &= ~RGBA_FLAG_CHANGED;
 		}
 		else
@@ -564,26 +613,34 @@ skip_video:
 			scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
 
 			args[2] = (unsigned long)(&scn_win);
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SCN_WINDOW, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_SCN_WINDOW, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_SCN_WINDOW failed");
 			args[2] = (unsigned long)(&src_win);
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_SRC_WINDOW, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_SRC_WINDOW, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_SRC_WINDOW failed");
 
 			__disp_fb_t fb_info;
 			memset(&fb_info, 0, sizeof(__disp_fb_t));
 			args[2] = (unsigned long)(&fb_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_GET_FB, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_FB, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_FB failed");
 
 			fb_info.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
 			args[2] = (unsigned long)(&fb_info);
-			ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args);
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args))
+				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_FB failed");
 		}
 
 		if (!(q->device->flags & DEVICE_FLAG_RLAYEROPEN))
 		{
 			args[2] = 0;
-			ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args);
-			VDPAU_LOG(LINFO, "OSD Layer opened.");
-			q->device->flags |= DEVICE_FLAG_RLAYEROPEN;
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_OPEN, args))
+				VDPAU_LOG(LERR, "OSD Layer open failed");
+			else
+			{
+				VDPAU_LOG(LINFO, "OSD Layer opened");
+				q->device->flags |= DEVICE_FLAG_RLAYEROPEN;
+			}
 		}
 	}
 	else
@@ -591,9 +648,13 @@ skip_video:
 		if (q->device->flags & DEVICE_FLAG_RLAYEROPEN)
 		{
 			uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
-			ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-			VDPAU_LOG(LINFO, "OSD Layer closed.");
-			q->device->flags &= ~DEVICE_FLAG_RLAYEROPEN;
+			if (ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args))
+				VDPAU_LOG(LERR, "OSD Layer close failed");
+			else
+			{
+				VDPAU_LOG(LINFO, "OSD Layer closed");
+				q->device->flags &= ~DEVICE_FLAG_RLAYEROPEN;
+			}
 		}
 	}
 
@@ -613,9 +674,10 @@ static void *presentation_thread(void *param)
 	VdpTime timeaftervsync = 0;
 	int timer;
 #ifdef DEBUG_TIME
-	VdpTime timein, timemid, timeout, timebeforevsync, oldvsync;
-	timemid = 0;
-	timebeforevsync = 0;
+	int skipped = 0;
+	VdpTime start, stop, oldvsync;
+	start = 0;
+	stop = 0;
 	oldvsync = 0;
 #endif
 	while (!(dev->flags & DEVICE_FLAG_EXIT)) {
@@ -624,9 +686,6 @@ static void *presentation_thread(void *param)
 			task_t *task;
 			if (!q_pop_head(Queue, (void *)&task)) /* remove it from Queue */
 			{
-#ifdef DEBUG_TIME
-				timein = get_vdp_time();
-#endif
 				/* Got a control flag */
 				switch (task->control) {
 					case CONTROL_REINIT_DISPLAY:
@@ -683,15 +742,18 @@ static void *presentation_thread(void *param)
 						os_cur->vs->first_frame = 0;
 					}
 #ifdef DEBUG_TIME
-					timemid = get_vdp_time();
+					start = get_vdp_time();
 #endif
 					/*
 					 * Main part: display the task, meaning:
 					 * push the frame to the address and then wait for the vsync
 					 */
-					do_presentation_queue_display(task);
+					if (do_presentation_queue_display(task))
+						VDPAU_LOG(LERR, "Something went wrong while displaying ...");
+					else
+						VDPAU_LOG(LDBG, "Processed surface %d", os_cur->id);
 #ifdef DEBUG_TIME
-					timebeforevsync = get_vdp_time();
+					stop = get_vdp_time();
 #endif
 					/* do the VSync, if enabled */
 					if (wait_for_vsync(dev))
@@ -721,14 +783,13 @@ static void *presentation_thread(void *param)
 				sfree(task->queue);
 				free(task);
 #ifdef DEBUG_TIME
-				timeout = get_vdp_time();
 				/*
 				 * We do some time debugging ...
 				 */
-				if (oldvsync)
-					VDPAU_TIME(LPQ2, "PQ time diff: i>d %" PRIu64 ", d>vb %" PRIu64 ", vb>va %" PRIu64 ", va>o %" PRIu64 ", i>o %" PRIu64 ", v>v %" PRIu64 "",
-					          ((timemid - timein) / 1000), ((timebeforevsync - timemid) / 1000), ((timeaftervsync - timebeforevsync) / 1000),
-						  ((timeout - timeaftervsync) / 1000), ((timeout - timein) / 1000), ((timeaftervsync - oldvsync) / 1000));
+				if (oldvsync && (((timeaftervsync - oldvsync) / 1000) > 21 * 1000)) /* Only correct for 50Hz */
+					VDPAU_TIME(LPQ2, "VSync diff: %" PRIu64 ", (%" PRIu64 ", %" PRIu64 ", %" PRIu64 "), q_len %d, skipped: %d",
+					          ((timeaftervsync - oldvsync) / 1000), (timeaftervsync / 1000), (oldvsync / 1000),
+						  ((stop - start) / 1000), q_length(Queue), skipped++);
 				oldvsync = timeaftervsync;
 #endif
 			}
@@ -963,6 +1024,11 @@ VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue p
 	}
 
 	*first_presentation_time = os->first_presentation_time;
+
+#ifdef DEBUG_TIME
+	os->start = get_vdp_time();
+	VDPAU_LOG(LDBG, "Last surface %d was unblocked at %" PRIu64 ", Diff: %" PRIu64 "", os->id, os->start, (os->start - os->stop) / 1000);
+#endif
 
 	return VDP_STATUS_OK;
 }
