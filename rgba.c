@@ -42,6 +42,86 @@ static int dirty_in_rect(const VdpRect *dirty, const VdpRect *rect)
 	       (dirty->x1 <= rect->x1) && (dirty->y1 <= rect->y1);
 }
 
+static int rect_is_equal(VdpRect const *rect1, VdpRect rect2)
+{
+	if (rect1->x0 == rect2.x0 &&
+	    rect1->y0 == rect2.y0 &&
+	    rect1->x1 == rect2.x1 &&
+	    rect1->y1 == rect2.y1)
+		return 1;
+
+	return 0;
+}
+
+static int color_is_equal(VdpColor const *colors1, VdpColor colors2)
+{
+	if (!colors1)
+		return 1;
+
+	if (colors1->red   == colors2.red &&
+	    colors1->green == colors2.green &&
+	    colors1->blue  == colors2.blue &&
+	    colors1->alpha == colors2.alpha)
+		return 1;
+
+	return 0;
+}
+
+static int blend_state_is_equal(VdpOutputSurfaceRenderBlendState const *blend_state,
+				VdpOutputSurfaceRenderBlendState blend_state2)
+{
+	return 1;
+}
+
+static int rgba_changed(rgba_surface_t *dest,
+                        VdpRect const *d_rect,
+                        rgba_surface_t *src,
+                        VdpRect const *s_rect,
+                        VdpColor const *colors,
+                        VdpOutputSurfaceRenderBlendState const *blend_state,
+                        uint32_t flags)
+{
+	uint32_t id = -1;
+
+	if (src)
+		id = src->id;
+
+	/* Check, if any render parameter changed */
+	if (rect_is_equal(d_rect, dest->refrgba.d_rect) &&
+	    rect_is_equal(s_rect, dest->refrgba.s_rect) &&
+	    blend_state_is_equal(blend_state, dest->refrgba.blend_state) &&
+	    color_is_equal(colors, dest->refrgba.colors) &&
+	    (flags == dest->refrgba.flags) &&
+	    (id == dest->refrgba.id))
+	{
+		/* We have the same rgba already in dest->rgba */
+		return 0;
+	}
+
+	/* Save the last render parameters as a struct in the output surface */
+	dest->refrgba.d_rect.x0 = d_rect->x0;
+	dest->refrgba.d_rect.y0 = d_rect->y0;
+	dest->refrgba.d_rect.x1 = d_rect->x1;
+	dest->refrgba.d_rect.y1 = d_rect->y1;
+	dest->refrgba.s_rect.x0 = s_rect->x0;
+	dest->refrgba.s_rect.y0 = s_rect->y0;
+	dest->refrgba.s_rect.x1 = s_rect->x1;
+	dest->refrgba.s_rect.y1 = s_rect->y1;
+
+	if (colors)
+	{
+		dest->refrgba.colors.red = colors->red;
+		dest->refrgba.colors.blue = colors->blue;
+		dest->refrgba.colors.green = colors->green;
+		dest->refrgba.colors.alpha = colors->alpha;
+	}
+
+	dest->refrgba.flags = flags;
+	dest->refrgba.id = id;
+
+	return 1;
+}
+
 VdpStatus rgba_create(rgba_surface_t *rgba,
                       device_ctx_t *device,
                       uint32_t width,
@@ -167,7 +247,6 @@ VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
 
-	rgba->flags &= ~RGBA_FLAG_RENDERED;
 	rgba->id++;
 
 #ifdef DEBUG_TIME
@@ -241,7 +320,6 @@ VdpStatus rgba_put_bits_indexed(rgba_surface_t *rgba,
 	rgba->flags |= RGBA_FLAG_DIRTY | RGBA_FLAG_NEEDS_FLUSH;
 	dirty_add_rect(&rgba->dirty, &d_rect);
 
-	rgba->flags &= ~RGBA_FLAG_RENDERED;
 	rgba->id++;
 
 #ifdef DEBUG_TIME
@@ -260,6 +338,7 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
                               VdpOutputSurfaceRenderBlendState const *blend_state,
                               uint32_t flags)
 {
+	int zerosized = 0;
 #ifdef DEBUG_TIME
 	VdpTime timein, timeout;
 #endif
@@ -275,8 +354,8 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	/* set up source/destination rects using defaults where required */
 	VdpRect s_rect = {0, 0, 0, 0};
 	VdpRect d_rect = {0, 0, dest->width, dest->height};
-	s_rect.x1 = src ? src->width : 1;
-	s_rect.y1 = src ? src->height : 1;
+	s_rect.x1 = src ? src->width : 0;
+	s_rect.y1 = src ? src->height : 0;
 
 	if (source_rect)
 		s_rect = *source_rect;
@@ -286,19 +365,30 @@ VdpStatus rgba_render_surface(rgba_surface_t *dest,
 	/* ignore zero-sized surfaces (also workaround for g2d driver bug) */
 	if (s_rect.x0 == s_rect.x1 || s_rect.y0 == s_rect.y1 ||
 	    d_rect.x0 == d_rect.x1 || d_rect.y0 == d_rect.y1)
-		return VDP_STATUS_OK;
+		zerosized = 1;
 
-	if ((dest->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&dest->dirty, &d_rect))
-		rgba_clear(dest);
+	if (rgba_changed(dest, destination_rect, src, source_rect, colors, blend_state, flags))
+	{
+		if ((dest->flags & RGBA_FLAG_NEEDS_CLEAR) && !dirty_in_rect(&dest->dirty, &d_rect))
+			rgba_clear(dest);
+		if (!zerosized)
+		{
+			if (!src)
+				rgba_fill(dest, &d_rect, 0xffffffff);
+			else
+				rgba_blit(dest, &d_rect, src, &s_rect);
 
-	if (!src)
-		rgba_fill(dest, &d_rect, 0xffffffff);
+			dirty_add_rect(&dest->dirty, &d_rect);
+		}
+		VDPAU_LOG(LDBG, "rgba surface changed!");
+	}
 	else
-		rgba_blit(dest, &d_rect, src, &s_rect);
+	{
+		VDPAU_LOG(LALL, "rgba surface unchanged!");
+	}
 
 	dest->flags &= ~RGBA_FLAG_NEEDS_CLEAR;
 	dest->flags |= RGBA_FLAG_DIRTY;
-	dirty_add_rect(&dest->dirty, &d_rect);
 
 #ifdef DEBUG_TIME
 	timeout = get_vdp_time();

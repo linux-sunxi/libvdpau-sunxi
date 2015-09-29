@@ -32,7 +32,6 @@ static void cleanup_output_surface(void *ptr, void *meta)
 	output_surface_ctx_t *surface = ptr;
 
 	rgba_destroy(&surface->rgba);
-	rgba_destroy(&surface->prev_rgba);
 #ifdef GRAB
 	rgba_destroy(&surface->grab_rgba);
 #endif
@@ -68,7 +67,6 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 	out->saturation = 1.0;
 	out->first_presentation_time = 0;
 	out->status = VDP_PRESENTATION_QUEUE_STATUS_IDLE;
-	out->rgba_cnt = 0;
 
 	pthread_mutex_init(&out->mutex, NULL);
 	pthread_cond_init(&out->cond, NULL);
@@ -77,19 +75,11 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	ret = rgba_create(&out->prev_rgba, dev, width, height, rgba_format);
-	if (ret != VDP_STATUS_OK)
-	{
-		rgba_destroy(&out->rgba);
-		return ret;
-	}
-
 #ifdef GRAB
 	ret = rgba_create(&out->grab_rgba, dev, width, height, rgba_format);
 	if (ret != VDP_STATUS_OK)
 	{
 		rgba_destroy(&out->rgba);
-		rgba_destroy(&out->prev_rgba);
 		return ret;
 	}
 #endif
@@ -257,40 +247,17 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
                                                    VdpOutputSurfaceRenderBlendState const *blend_state,
                                                    uint32_t flags)
 {
-	VdpStatus ret;
-
 	smart output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	smart output_surface_ctx_t *in = handle_get(source_surface);
 	if (!in)
-	{
-		ret = rgba_render_surface(&out->rgba, destination_rect, NULL, source_rect,
-					colors, blend_state, flags);
-		out->prev_rgba = out->rgba;
-		out->rgba.flags |= RGBA_FLAG_CHANGED;
-		return ret;
-	}
+		return rgba_render_surface(&out->rgba, destination_rect, NULL, source_rect,
+			colors, blend_state, flags);
 
-	if ((out->rgba_cnt != in->rgba.id) || !(in->rgba.flags & RGBA_FLAG_RENDERED))
-	{
-		VDPAU_LOG(LDBG, "rgba output surface changed!");
-		ret = rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
-					colors, blend_state, flags);
-		out->prev_rgba = out->rgba;
-		out->rgba_cnt = in->rgba.id;
-		out->rgba.flags |= RGBA_FLAG_CHANGED;
-		in->rgba.flags |= RGBA_FLAG_RENDERED;
-	}
-	else
-	{
-		VDPAU_LOG(LALL, "rgba output surface unchanged!");
-		out->rgba = out->prev_rgba;
-		ret = VDP_STATUS_OK;
-	}
-
-	return ret;
+	return rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
+		colors, blend_state, flags);
 }
 
 VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_surface,
@@ -301,40 +268,18 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
                                                    VdpOutputSurfaceRenderBlendState const *blend_state,
                                                    uint32_t flags)
 {
-	VdpStatus ret;
-
 	smart output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	smart bitmap_surface_ctx_t *in = handle_get(source_surface);
 	if (!in)
-	{
-		ret = rgba_render_surface(&out->rgba, destination_rect, NULL, source_rect,
-					colors, blend_state, flags);
-		out->prev_rgba = out->rgba;
-		out->rgba.flags |= RGBA_FLAG_CHANGED;
-		return ret;
-	}
+		return rgba_render_surface(&out->rgba, destination_rect, NULL, source_rect,
+			colors, blend_state, flags);
 
-	if ((out->rgba_cnt != in->rgba.id) || !(in->rgba.flags & RGBA_FLAG_RENDERED))
-	{
-		VDPAU_LOG(LDBG, "rgba bitmap surface changed!");
-		ret = rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
-					colors, blend_state, flags);
-		out->prev_rgba = out->rgba;
-		out->rgba_cnt = in->rgba.id;
-		out->rgba.flags |= RGBA_FLAG_CHANGED;
-		in->rgba.flags |= RGBA_FLAG_RENDERED;
-	}
-	else
-	{
-		VDPAU_LOG(LALL, "rgba bitmap surface unchanged!");
-		out->rgba = out->prev_rgba;
-		ret = VDP_STATUS_OK;
-	}
+	return rgba_render_surface(&out->rgba, destination_rect, &in->rgba, source_rect,
+		colors, blend_state, flags);
 
-	return ret;
 }
 
 VdpStatus vdp_output_surface_query_capabilities(VdpDevice device,

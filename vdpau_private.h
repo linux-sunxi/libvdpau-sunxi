@@ -163,8 +163,15 @@ typedef struct
 #define RGBA_FLAG_DIRTY (1 << 0)
 #define RGBA_FLAG_NEEDS_FLUSH (1 << 1)
 #define RGBA_FLAG_NEEDS_CLEAR (1 << 2)
-#define RGBA_FLAG_CHANGED (1 << 3)
-#define RGBA_FLAG_RENDERED (1 << 4)
+
+typedef struct
+{
+	VdpRect s_rect, d_rect;
+	VdpColor colors;
+	uint32_t flags;
+	uint32_t id;
+	VdpOutputSurfaceRenderBlendState blend_state;
+} rgba_refsurface_t;
 
 typedef struct
 {
@@ -175,11 +182,12 @@ typedef struct
 	VdpRect dirty;
 	uint32_t flags;
 	uint32_t id;
+	rgba_refsurface_t refrgba;
 } rgba_surface_t;
 
 typedef struct
 {
-	rgba_surface_t rgba, prev_rgba;
+	rgba_surface_t rgba;
 #ifdef GRAB
 	rgba_surface_t grab_rgba;
 #endif
@@ -188,7 +196,6 @@ typedef struct
 	VdpRect video_src_rect, video_dst_rect;
 	int csc_change;
 	int bg_change;
-	uint32_t rgba_cnt;
 	float brightness;
 	float contrast;
 	float saturation;

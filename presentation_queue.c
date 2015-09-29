@@ -255,7 +255,6 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 			q->target->drawable_change = 0;
 			q->target->drawable_unmap = 0;
 			init_display = CONTROL_REINIT_DISPLAY;
-			os->rgba.flags |= RGBA_FLAG_CHANGED;
 			VDPAU_LOG(LINFO, "Processing MapNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
 		/*
@@ -274,7 +273,6 @@ static VdpStatus do_presentation_queue_display(task_t *task)
 				q->target->drawable_height = ev.xconfigure.height;
 				q->target->drawable_change = 1;
 				init_display = CONTROL_REINIT_DISPLAY;
-				os->rgba.flags |= RGBA_FLAG_CHANGED;
 			}
 			VDPAU_LOG(LINFO, "Processing ConfigureNotify (QueueLength: %d)",  XEventsQueued(q->device->display, QueuedAlready));
 			break;
@@ -570,78 +568,44 @@ skip_video:
 		rgba_flush(&os->rgba);
 		uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
 
-		if (os->rgba.flags & RGBA_FLAG_CHANGED) /* we have some changed bits on it */
+		__disp_layer_info_t layer_info;
+		memset(&layer_info, 0, sizeof(layer_info));
+
+		args[2] = (unsigned long)(&layer_info);
+		if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args))
+			VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_PARA failed");
+
+		layer_info.pipe = 1;
+		layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
+		layer_info.fb.mode = DISP_MOD_INTERLEAVED;
+		layer_info.fb.format = DISP_FORMAT_ARGB8888;
+		layer_info.fb.seq = DISP_SEQ_ARGB;
+		switch (os->rgba.format)
 		{
-			__disp_layer_info_t layer_info;
-			memset(&layer_info, 0, sizeof(layer_info));
-
-			args[2] = (unsigned long)(&layer_info);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_PARA, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_PARA failed");
-
-			layer_info.pipe = 1;
-			layer_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
-			layer_info.fb.mode = DISP_MOD_INTERLEAVED;
-			layer_info.fb.format = DISP_FORMAT_ARGB8888;
-			layer_info.fb.seq = DISP_SEQ_ARGB;
-			switch (os->rgba.format)
-			{
-			case VDP_RGBA_FORMAT_R8G8B8A8:
-				layer_info.fb.br_swap = 1;
-				break;
-			case VDP_RGBA_FORMAT_B8G8R8A8:
-			default:
-				layer_info.fb.br_swap = 0;
-				break;
-			}
-			layer_info.fb.cs_mode = DISP_BT601;
-			layer_info.fb.size.width = os->rgba.width;
-			layer_info.fb.size.height = os->rgba.height;
-			layer_info.src_win.x = 0;
-			layer_info.src_win.y = 0;
-			layer_info.src_win.width = os->rgba.width;
-			layer_info.src_win.height = os->rgba.height;
-			layer_info.scn_win.x = q->target->x;
-			layer_info.scn_win.y = q->target->y;
-			layer_info.scn_win.width = clip_width ? clip_width : os->rgba.width;
-			layer_info.scn_win.height = clip_height ? clip_height : os->rgba.height;
-			layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
-
-			args[2] = (unsigned long)(&layer_info);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_PARA failed");
-			os->rgba.flags &= ~RGBA_FLAG_CHANGED;
+		case VDP_RGBA_FORMAT_R8G8B8A8:
+			layer_info.fb.br_swap = 1;
+			break;
+		case VDP_RGBA_FORMAT_B8G8R8A8:
+		default:
+			layer_info.fb.br_swap = 0;
+			break;
 		}
-		else
-		{
-			__disp_rect_t scn_win, src_win;
-			src_win.x = os->rgba.dirty.x0;
-			src_win.y = os->rgba.dirty.y0;
-			src_win.width = os->rgba.dirty.x1 - os->rgba.dirty.x0;
-			src_win.height = os->rgba.dirty.y1 - os->rgba.dirty.y0;
-			scn_win.x = q->target->x + os->rgba.dirty.x0;
-			scn_win.y = q->target->y + os->rgba.dirty.y0;
-			scn_win.width = min_nz(clip_width, os->rgba.dirty.x1) - os->rgba.dirty.x0;
-			scn_win.height = min_nz(clip_height, os->rgba.dirty.y1) - os->rgba.dirty.y0;
+		layer_info.fb.cs_mode = DISP_BT601;
+		layer_info.fb.size.width = os->rgba.width;
+		layer_info.fb.size.height = os->rgba.height;
+		layer_info.src_win.x = 0;
+		layer_info.src_win.y = 0;
+		layer_info.src_win.width = os->rgba.width;
+		layer_info.src_win.height = os->rgba.height;
+		layer_info.scn_win.x = q->target->x;
+		layer_info.scn_win.y = q->target->y;
+		layer_info.scn_win.width = clip_width ? clip_width : os->rgba.width;
+		layer_info.scn_win.height = clip_height ? clip_height : os->rgba.height;
+		layer_info.fb.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
 
-			args[2] = (unsigned long)(&scn_win);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_SCN_WINDOW, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_SCN_WINDOW failed");
-			args[2] = (unsigned long)(&src_win);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_SRC_WINDOW, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_SRC_WINDOW failed");
-
-			__disp_fb_t fb_info;
-			memset(&fb_info, 0, sizeof(__disp_fb_t));
-			args[2] = (unsigned long)(&fb_info);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_GET_FB, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_GET_FB failed");
-
-			fb_info.addr[0] = ve_virt2phys(os->rgba.data) + DRAM_OFFSET;
-			args[2] = (unsigned long)(&fb_info);
-			if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_FB, args))
-				VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_FB failed");
-		}
+		args[2] = (unsigned long)(&layer_info);
+		if (ioctl(q->target->fd, DISP_CMD_LAYER_SET_PARA, args))
+			VDPAU_LOG(LERR, "DISP_CMD_LAYER_SET_PARA failed");
 
 		if (!(q->device->flags & DEVICE_FLAG_RLAYEROPEN))
 		{
