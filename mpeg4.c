@@ -75,9 +75,9 @@ static uint32_t get_bits(bitstream *bs, int n)
 
 typedef struct
 {
-	void *mbh_buffer;
-	void *dcac_buffer;
-	void *ncf_buffer;
+	struct ve_mem *mbh_buffer;
+	struct ve_mem *dcac_buffer;
+	struct ve_mem *ncf_buffer;
 } mpeg4_private_t;
 
 static void mpeg4_private_free(decoder_ctx_t *decoder)
@@ -159,7 +159,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	bitstream bs = { .data = decoder->data, .length = len, .bitpos = 0 };
+	bitstream bs = { .data = decoder->data->virt, .length = len, .bitpos = 0 };
 
 	while (find_startcode(&bs))
 	{
@@ -174,15 +174,15 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		void *ve_regs = ve_get(VE_ENGINE_MPEG, 0);
 
 		// set buffers
-		writel(ve_virt2phys(decoder_p->mbh_buffer), ve_regs + VE_MPEG_MBH_ADDR);
-		writel(ve_virt2phys(decoder_p->dcac_buffer), ve_regs + VE_MPEG_DCAC_ADDR);
-		writel(ve_virt2phys(decoder_p->ncf_buffer), ve_regs + VE_MPEG_NCF_ADDR);
+		writel(decoder_p->mbh_buffer->phys, ve_regs + VE_MPEG_MBH_ADDR);
+		writel(decoder_p->dcac_buffer->phys, ve_regs + VE_MPEG_DCAC_ADDR);
+		writel(decoder_p->ncf_buffer->phys, ve_regs + VE_MPEG_NCF_ADDR);
 
 		// set output buffers
-		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_REC_LUMA);
-		writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_REC_CHROMA);
-		writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
-		writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_ROT_CHROMA);
+		writel(output->yuv->data->phys, ve_regs + VE_MPEG_REC_LUMA);
+		writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
+		writel(output->yuv->data->phys, ve_regs + VE_MPEG_ROT_LUMA);
+		writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
@@ -220,14 +220,14 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *forward = handle_get(info->forward_reference);
-			writel(ve_virt2phys(forward->yuv->data), ve_regs + VE_MPEG_FWD_LUMA);
-			writel(ve_virt2phys(forward->yuv->data + forward->luma_size), ve_regs + VE_MPEG_FWD_CHROMA);
+			writel(forward->yuv->data->phys, ve_regs + VE_MPEG_FWD_LUMA);
+			writel(forward->yuv->data->phys + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *backward = handle_get(info->backward_reference);
-			writel(ve_virt2phys(backward->yuv->data), ve_regs + VE_MPEG_BACK_LUMA);
-			writel(ve_virt2phys(backward->yuv->data + backward->luma_size), ve_regs + VE_MPEG_BACK_CHROMA);
+			writel(backward->yuv->data->phys, ve_regs + VE_MPEG_BACK_LUMA);
+			writel(backward->yuv->data->phys + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
 		// set trb/trd
@@ -248,7 +248,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(len * 8 - bs.bitpos, ve_regs + VE_MPEG_VLD_LEN);
 
 		// input end
-		uint32_t input_addr = ve_virt2phys(decoder->data);
+		uint32_t input_addr = decoder->data->phys;
 		writel(input_addr + VBV_SIZE - 1, ve_regs + VE_MPEG_VLD_END);
 
 		// set input buffer

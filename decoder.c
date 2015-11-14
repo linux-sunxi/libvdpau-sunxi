@@ -144,10 +144,10 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 
 	for (i = 0; i < bitstream_buffer_count; i++)
 	{
-		memcpy(dec->data + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
+		memcpy(dec->data->virt + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
 		pos += bitstream_buffers[i].bitstream_bytes;
 	}
-	ve_flush_cache(dec->data, pos);
+	ve_flush_cache(dec->data);
 
 	return dec->decode(dec, picture_info, pos, vid);
 }

@@ -176,15 +176,15 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	switch (destination_ycbcr_format)
 	{
 	case VDP_YCBCR_FORMAT_NV12:
-		tiled_to_planar(vs->yuv->data, destination_data[0], destination_pitches[0], vs->width, vs->height);
-		tiled_to_planar(vs->yuv->data + vs->luma_size, destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
+		tiled_to_planar(vs->yuv->data->virt, destination_data[0], destination_pitches[0], vs->width, vs->height);
+		tiled_to_planar(vs->yuv->data->virt + vs->luma_size, destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
 
 	case VDP_YCBCR_FORMAT_YV12:
 		if (destination_pitches[2] != destination_pitches[1])
 			return VDP_STATUS_ERROR;
-		tiled_to_planar(vs->yuv->data, destination_data[0], destination_pitches[0], vs->width, vs->height);
-		tiled_deinterleave_to_planar(vs->yuv->data + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
+		tiled_to_planar(vs->yuv->data->virt, destination_data[0], destination_pitches[0], vs->width, vs->height);
+		tiled_deinterleave_to_planar(vs->yuv->data->virt + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
 	}
 
@@ -216,7 +216,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_422)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data;
+		dst = vs->yuv->data->virt;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, 2*vs->width);
 			src += source_pitches[0];
@@ -232,14 +232,14 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data;
+		dst = vs->yuv->data->virt;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data + vs->luma_size;
+		dst = vs->yuv->data->virt + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[1];
@@ -251,21 +251,21 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data;
+		dst = vs->yuv->data->virt;
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[2];
-		dst = vs->yuv->data + vs->luma_size;
+		dst = vs->yuv->data->virt + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[1];
 			dst += vs->width / 2;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data + vs->luma_size + vs->luma_size / 4;
+		dst = vs->yuv->data->virt + vs->luma_size + vs->luma_size / 4;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[2];

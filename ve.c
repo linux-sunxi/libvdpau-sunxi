@@ -70,9 +70,7 @@ struct cedarv_cache_range
 
 struct memchunk_t
 {
-	uint32_t phys_addr;
-	int size;
-	void *virt_addr;
+	struct ve_mem mem;
 	struct memchunk_t *next;
 };
 
@@ -104,8 +102,8 @@ int ve_open(void)
 	if (ve.regs == MAP_FAILED)
 		goto err;
 
-	ve.first_memchunk.phys_addr = info.reserved_mem - PAGE_OFFSET;
-	ve.first_memchunk.size = info.reserved_mem_size;
+	ve.first_memchunk.mem.phys = info.reserved_mem - PAGE_OFFSET;
+	ve.first_memchunk.mem.size = info.reserved_mem_size;
 
 	ioctl(ve.fd, IOCTL_ENGINE_REQ, 0);
 	ioctl(ve.fd, IOCTL_ENABLE_VE, 0);
@@ -169,7 +167,7 @@ void ve_put(void)
 	pthread_mutex_unlock(&ve.device_lock);
 }
 
-void *ve_malloc(int size)
+struct ve_mem *ve_malloc(int size)
 {
 	if (ve.fd == -1)
 		return NULL;
@@ -178,17 +176,18 @@ void *ve_malloc(int size)
 		return NULL;
 
 	void *addr = NULL;
+	struct ve_mem *ret = NULL;
 
 	size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 	struct memchunk_t *c, *best_chunk = NULL;
 	for (c = &ve.first_memchunk; c != NULL; c = c->next)
 	{
-		if(c->virt_addr == NULL && c->size >= size)
+		if(c->mem.virt == NULL && c->mem.size >= size)
 		{
-			if (best_chunk == NULL || c->size < best_chunk->size)
+			if (best_chunk == NULL || c->mem.size < best_chunk->mem.size)
 				best_chunk = c;
 
-			if (c->size == size)
+			if (c->mem.size == size)
 				break;
 		}
 	}
@@ -196,39 +195,40 @@ void *ve_malloc(int size)
 	if (!best_chunk)
 		goto out;
 
-	int left_size = best_chunk->size - size;
+	int left_size = best_chunk->mem.size - size;
 
-	addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, best_chunk->phys_addr + PAGE_OFFSET);
+	addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, best_chunk->mem.phys + PAGE_OFFSET);
 	if (addr == MAP_FAILED)
 	{
-		addr = NULL;
+		ret = NULL;
 		goto out;
 	}
 
-	best_chunk->virt_addr = addr;
-	best_chunk->size = size;
+	best_chunk->mem.virt = addr;
+	best_chunk->mem.size = size;
 
 	if (left_size > 0)
 	{
 		c = malloc(sizeof(struct memchunk_t));
-		c->phys_addr = best_chunk->phys_addr + size;
-		c->size = left_size;
-		c->virt_addr = NULL;
+		c->mem.phys = best_chunk->mem.phys + size;
+		c->mem.size = left_size;
+		c->mem.virt = NULL;
 		c->next = best_chunk->next;
 		best_chunk->next = c;
 	}
 
+	ret = &best_chunk->mem;
 out:
 	pthread_rwlock_unlock(&ve.memory_lock);
-	return addr;
+	return ret;
 }
 
-void ve_free(void *ptr)
+void ve_free(struct ve_mem *mem)
 {
 	if (ve.fd == -1)
 		return;
 
-	if (ptr == NULL)
+	if (mem == NULL)
 		return;
 
 	if (pthread_rwlock_wrlock(&ve.memory_lock))
@@ -237,22 +237,22 @@ void ve_free(void *ptr)
 	struct memchunk_t *c;
 	for (c = &ve.first_memchunk; c != NULL; c = c->next)
 	{
-		if (c->virt_addr == ptr)
+		if (&c->mem == mem)
 		{
-			munmap(ptr, c->size);
-			c->virt_addr = NULL;
+			munmap(c->mem.virt, c->mem.size);
+			c->mem.virt = NULL;
 			break;
 		}
 	}
 
 	for (c = &ve.first_memchunk; c != NULL; c = c->next)
 	{
-		if (c->virt_addr == NULL)
+		if (c->mem.virt == NULL)
 		{
-			while (c->next != NULL && c->next->virt_addr == NULL)
+			while (c->next != NULL && c->next->mem.virt == NULL)
 			{
 				struct memchunk_t *n = c->next;
-				c->size += n->size;
+				c->mem.size += n->mem.size;
 				c->next = n->next;
 				free(n);
 			}
@@ -262,47 +262,15 @@ void ve_free(void *ptr)
 	pthread_rwlock_unlock(&ve.memory_lock);
 }
 
-uint32_t ve_virt2phys(void *ptr)
-{
-	if (ve.fd == -1)
-		return 0;
-
-	if (pthread_rwlock_rdlock(&ve.memory_lock))
-		return 0;
-
-	uint32_t addr = 0;
-
-	struct memchunk_t *c;
-	for (c = &ve.first_memchunk; c != NULL; c = c->next)
-	{
-		if (c->virt_addr == NULL)
-			continue;
-
-		if (c->virt_addr == ptr)
-		{
-			addr = c->phys_addr;
-			break;
-		}
-		else if (ptr > c->virt_addr && ptr < (c->virt_addr + c->size))
-		{
-			addr = c->phys_addr + (ptr - c->virt_addr);
-			break;
-		}
-	}
-
-	pthread_rwlock_unlock(&ve.memory_lock);
-	return addr;
-}
-
-void ve_flush_cache(void *start, int len)
+void ve_flush_cache(struct ve_mem *mem)
 {
 	if (ve.fd == -1)
 		return;
 
 	struct cedarv_cache_range range =
 	{
-		.start = (int)start,
-		.end = (int)(start + len)
+		.start = (int)mem->virt,
+		.end = (int)mem->virt + mem->size
 	};
 
 	ioctl(ve.fd, IOCTL_FLUSH_CACHE, (void*)(&range));
