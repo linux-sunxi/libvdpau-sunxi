@@ -23,7 +23,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include "sunxi_disp_ioctl.h"
+#include "kernel-headers/sunxi_disp_ioctl.h"
 #include "ve.h"
 #include "rgba.h"
 

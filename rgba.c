@@ -21,7 +21,7 @@
 #include <sys/ioctl.h>
 #include "vdpau_private.h"
 #include "ve.h"
-#include "g2d_driver.h"
+#include "kernel-headers/g2d_driver.h"
 #include "rgba.h"
 
 static void dirty_add_rect(VdpRect *dirty, const VdpRect *rect)
