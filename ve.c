@@ -19,6 +19,7 @@
 
 #include <fcntl.h>
 #include <pthread.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,10 +27,16 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include "ve.h"
+#include "kernel-headers/ion.h"
+#include "kernel-headers/ion_sunxi.h"
 
 #define DEVICE "/dev/cedar_dev"
 #define PAGE_OFFSET (0xc0000000) // from kernel
 #define PAGE_SIZE (4096)
+
+#define container_of(ptr, type, member) ({                      \
+	const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+	(type *)( (char *)__mptr - offsetof(type,member) );})
 
 enum IOCTL_CMD
 {
@@ -74,15 +81,23 @@ struct memchunk_t
 	struct memchunk_t *next;
 };
 
+struct ion_mem
+{
+	struct ion_handle *handle;
+	int fd;
+	struct ve_mem mem;
+};
+
 static struct
 {
 	int fd;
+	int ion_fd;
 	void *regs;
 	int version;
 	struct memchunk_t first_memchunk;
 	pthread_rwlock_t memory_lock;
 	pthread_mutex_t device_lock;
-} ve = { .fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER, .device_lock = PTHREAD_MUTEX_INITIALIZER };
+} ve = { .fd = -1, .ion_fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER, .device_lock = PTHREAD_MUTEX_INITIALIZER };
 
 int ve_open(void)
 {
@@ -96,14 +111,21 @@ int ve_open(void)
 		return 0;
 
 	if (ioctl(ve.fd, IOCTL_GET_ENV_INFO, (void *)(&info)) == -1)
-		goto err;
+		goto close;
 
 	ve.regs = mmap(NULL, 0x800, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, info.registers);
 	if (ve.regs == MAP_FAILED)
-		goto err;
+		goto close;
 
 	ve.first_memchunk.mem.phys = info.reserved_mem - PAGE_OFFSET;
 	ve.first_memchunk.mem.size = info.reserved_mem_size;
+
+	if (ve.first_memchunk.mem.size == 0)
+	{
+		ve.ion_fd = open("/dev/ion", O_RDONLY);
+		if (ve.ion_fd == -1)
+			goto unmap;
+	}
 
 	ioctl(ve.fd, IOCTL_ENGINE_REQ, 0);
 	ioctl(ve.fd, IOCTL_ENABLE_VE, 0);
@@ -117,7 +139,9 @@ int ve_open(void)
 
 	return 1;
 
-err:
+unmap:
+	munmap(ve.regs, 0x800);
+close:
 	close(ve.fd);
 	ve.fd = -1;
 	return 0;
@@ -133,6 +157,9 @@ void ve_close(void)
 
 	munmap(ve.regs, 0x800);
 	ve.regs = NULL;
+
+	if (ve.ion_fd != -1)
+		close(ve.ion_fd);
 
 	close(ve.fd);
 	ve.fd = -1;
@@ -167,10 +194,80 @@ void ve_put(void)
 	pthread_mutex_unlock(&ve.device_lock);
 }
 
+static struct ve_mem *ion_malloc(int size)
+{
+	struct ion_mem *imem = calloc(1, sizeof(struct ion_mem));
+	if (!imem)
+	{
+		perror("calloc ion_buffer failed");
+		return NULL;
+	}
+
+	struct ion_allocation_data alloc = {
+		.len = size,
+		.align = 4096,
+		.heap_id_mask = ION_HEAP_TYPE_DMA,
+		.flags = ION_FLAG_CACHED | ION_FLAG_CACHED_NEEDS_SYNC,
+	};
+
+	if (ioctl(ve.ion_fd, ION_IOC_ALLOC, &alloc))
+	{
+		perror("ION_IOC_ALLOC failed");
+		free(imem);
+		return NULL;
+	}
+
+	imem->handle = alloc.handle;
+	imem->mem.size = size;
+
+	struct ion_fd_data map = {
+		.handle = imem->handle,
+	};
+
+	if (ioctl(ve.ion_fd, ION_IOC_MAP, &map))
+	{
+		perror("ION_IOC_MAP failed");
+		free(imem);
+		return NULL;
+	}
+
+	imem->fd = map.fd;
+
+	imem->mem.virt = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, imem->fd, 0);
+	if (imem->mem.virt == MAP_FAILED)
+	{
+		perror("mmap failed");
+		return NULL;
+	}
+
+	sunxi_phys_data phys = {
+		.handle = imem->handle,
+	};
+
+	struct ion_custom_data custom = {
+		.cmd = ION_IOC_SUNXI_PHYS_ADDR,
+		.arg = (unsigned long)(&phys),
+	};
+
+	if (ioctl(ve.ion_fd, ION_IOC_CUSTOM, &custom))
+	{
+		perror("ION_IOC_CUSTOM(SUNXI_PHYS_ADDR) failed");
+		free(imem);
+		return NULL;
+	}
+
+	imem->mem.phys = phys.phys_addr - 0x40000000;
+
+	return &imem->mem;
+}
+
 struct ve_mem *ve_malloc(int size)
 {
 	if (ve.fd == -1)
 		return NULL;
+
+	if (ve.ion_fd != -1)
+		return ion_malloc(size);
 
 	if (pthread_rwlock_wrlock(&ve.memory_lock))
 		return NULL;
@@ -223,6 +320,33 @@ out:
 	return ret;
 }
 
+static void ion_free(struct ve_mem *mem)
+{
+	if (ve.ion_fd == -1 || !mem)
+		return;
+
+	struct ion_mem *imem = container_of(mem, struct ion_mem, mem);
+
+	if (munmap(mem->virt, mem->size))
+	{
+		perror("munmap failed");
+		return;
+	}
+
+	close(imem->fd);
+
+	struct ion_handle_data handle = {
+		.handle = imem->handle,
+	};
+
+	if (ioctl(ve.ion_fd, ION_IOC_FREE, &handle))
+	{
+		perror("ION_IOC_FREE failed");
+		free(imem);
+		return;
+	}
+}
+
 void ve_free(struct ve_mem *mem)
 {
 	if (ve.fd == -1)
@@ -230,6 +354,9 @@ void ve_free(struct ve_mem *mem)
 
 	if (mem == NULL)
 		return;
+
+	if (ve.ion_fd != -1)
+		ion_free(mem);
 
 	if (pthread_rwlock_wrlock(&ve.memory_lock))
 		return;
@@ -267,11 +394,29 @@ void ve_flush_cache(struct ve_mem *mem)
 	if (ve.fd == -1)
 		return;
 
-	struct cedarv_cache_range range =
+	if (ve.ion_fd != -1)
 	{
-		.start = (int)mem->virt,
-		.end = (int)mem->virt + mem->size
-	};
+		sunxi_cache_range range = {
+			.start = (long)mem->virt,
+			.end = (long)mem->virt + mem->size,
+		};
 
-	ioctl(ve.fd, IOCTL_FLUSH_CACHE, (void*)(&range));
+		struct ion_custom_data cache = {
+			.cmd = ION_IOC_SUNXI_FLUSH_RANGE,
+			.arg = (unsigned long)(&range),
+		};
+
+		if (ioctl(ve.ion_fd, ION_IOC_CUSTOM, &cache))
+			perror("ION_IOC_CUSTOM(SUNXI_FLUSH_RANGE) failed");
+	}
+	else
+	{
+		struct cedarv_cache_range range =
+		{
+			.start = (int)mem->virt,
+			.end = (int)mem->virt + mem->size
+		};
+
+		ioctl(ve.fd, IOCTL_FLUSH_CACHE, (void*)(&range));
+	}
 }
