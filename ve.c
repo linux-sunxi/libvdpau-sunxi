@@ -29,6 +29,7 @@
 #include "ve.h"
 #include "kernel-headers/ion.h"
 #include "kernel-headers/ion_sunxi.h"
+#include "kernel-headers/cedar_ve.h"
 
 #define DEVICE "/dev/cedar_dev"
 #define PAGE_OFFSET (0xc0000000) // from kernel
@@ -37,43 +38,6 @@
 #define container_of(ptr, type, member) ({                      \
 	const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
 	(type *)( (char *)__mptr - offsetof(type,member) );})
-
-enum IOCTL_CMD
-{
-	IOCTL_UNKOWN = 0x100,
-	IOCTL_GET_ENV_INFO,
-	IOCTL_WAIT_VE,
-	IOCTL_RESET_VE,
-	IOCTL_ENABLE_VE,
-	IOCTL_DISABLE_VE,
-	IOCTL_SET_VE_FREQ,
-
-	IOCTL_CONFIG_AVS2 = 0x200,
-	IOCTL_GETVALUE_AVS2 ,
-	IOCTL_PAUSE_AVS2 ,
-	IOCTL_START_AVS2 ,
-	IOCTL_RESET_AVS2 ,
-	IOCTL_ADJUST_AVS2,
-	IOCTL_ENGINE_REQ,
-	IOCTL_ENGINE_REL,
-	IOCTL_ENGINE_CHECK_DELAY,
-	IOCTL_GET_IC_VER,
-	IOCTL_ADJUST_AVS2_ABS,
-	IOCTL_FLUSH_CACHE
-};
-
-struct ve_info
-{
-	uint32_t reserved_mem;
-	int reserved_mem_size;
-	uint32_t registers;
-};
-
-struct cedarv_cache_range
-{
-	long start;
-	long end;
-};
 
 struct memchunk_t
 {
@@ -104,7 +68,7 @@ int ve_open(void)
 	if (ve.fd != -1)
 		return 0;
 
-	struct ve_info info;
+	struct cedarv_env_infomation info;
 
 	ve.fd = open(DEVICE, O_RDWR);
 	if (ve.fd == -1)
@@ -113,12 +77,12 @@ int ve_open(void)
 	if (ioctl(ve.fd, IOCTL_GET_ENV_INFO, (void *)(&info)) == -1)
 		goto close;
 
-	ve.regs = mmap(NULL, 0x800, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, info.registers);
+	ve.regs = mmap(NULL, 0x800, PROT_READ | PROT_WRITE, MAP_SHARED, ve.fd, info.address_macc);
 	if (ve.regs == MAP_FAILED)
 		goto close;
 
-	ve.first_memchunk.mem.phys = info.reserved_mem - PAGE_OFFSET;
-	ve.first_memchunk.mem.size = info.reserved_mem_size;
+	ve.first_memchunk.mem.phys = info.phymem_start - PAGE_OFFSET;
+	ve.first_memchunk.mem.size = info.phymem_total_size;
 
 	if (ve.first_memchunk.mem.size == 0)
 	{
@@ -175,7 +139,7 @@ int ve_wait(int timeout)
 	if (ve.fd == -1)
 		return 0;
 
-	return ioctl(ve.fd, IOCTL_WAIT_VE, timeout);
+	return ioctl(ve.fd, IOCTL_WAIT_VE_DE, timeout);
 }
 
 void *ve_get(int engine, uint32_t flags)
