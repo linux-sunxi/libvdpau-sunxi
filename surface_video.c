@@ -46,23 +46,7 @@ static VdpStatus yuv_new(video_surface_ctx_t *video_surface)
 		return VDP_STATUS_RESOURCES;
 
 	video_surface->yuv->ref_count = 1;
-
-	switch (video_surface->chroma_type)
-	{
-	case VDP_CHROMA_TYPE_444:
-		video_surface->yuv->data = ve_malloc(video_surface->luma_size * 3);
-		break;
-	case VDP_CHROMA_TYPE_422:
-		video_surface->yuv->data = ve_malloc(video_surface->luma_size * 2);
-		break;
-	case VDP_CHROMA_TYPE_420:
-		video_surface->yuv->data = ve_malloc(video_surface->luma_size +
-			ALIGN(video_surface->width, 32) * ALIGN(video_surface->height / 2, 32));
-		break;
-	default:
-		free(video_surface->yuv);
-		return VDP_STATUS_INVALID_CHROMA_TYPE;
-	}
+	video_surface->yuv->data = ve_malloc(video_surface->luma_size + video_surface->chroma_size);
 
 	if (!(video_surface->yuv->data))
 	{
@@ -80,6 +64,23 @@ VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
 		video_surface->yuv->ref_count--;
 		return yuv_new(video_surface);
 	}
+
+	return VDP_STATUS_OK;
+}
+
+VdpStatus rec_prepare(video_surface_ctx_t *video_surface)
+{
+	if (ve_get_version() == 0x1680)
+	{
+		if (!video_surface->rec)
+		{
+			video_surface->rec = ve_malloc(video_surface->luma_size + video_surface->chroma_size);
+			if (!video_surface->rec)
+				return VDP_STATUS_RESOURCES;
+		}
+	}
+	else
+		video_surface->rec = video_surface->yuv->data;
 
 	return VDP_STATUS_OK;
 }
@@ -110,6 +111,21 @@ VdpStatus vdp_video_surface_create(VdpDevice device,
 	vs->chroma_type = chroma_type;
 
 	vs->luma_size = ALIGN(width, 32) * ALIGN(height, 32);
+	switch (chroma_type)
+	{
+	case VDP_CHROMA_TYPE_444:
+		vs->chroma_size = vs->luma_size * 2;
+		break;
+	case VDP_CHROMA_TYPE_422:
+		vs->chroma_size = vs->luma_size;
+		break;
+	case VDP_CHROMA_TYPE_420:
+		vs->chroma_size = ALIGN(vs->width, 32) * ALIGN(vs->height / 2, 32);
+		break;
+	default:
+		handle_destroy(*surface);
+		return VDP_STATUS_INVALID_CHROMA_TYPE;
+	}
 
 	VdpStatus ret = yuv_new(vs);
 	if (ret != VDP_STATUS_OK)
@@ -129,6 +145,9 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 
 	if (vs->decoder_private_free)
 		vs->decoder_private_free(vs);
+
+	if (vs->rec && vs->rec != vs->yuv->data)
+		ve_free(vs->rec);
 
 	yuv_unref(vs->yuv);
 
@@ -265,7 +284,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 			dst += vs->width / 2;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data->virt + vs->luma_size + vs->luma_size / 4;
+		dst = vs->yuv->data->virt + vs->luma_size + vs->chroma_size / 2;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[2];

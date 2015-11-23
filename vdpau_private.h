@@ -56,7 +56,8 @@ typedef struct video_surface_ctx_struct
 	VdpChromaType chroma_type;
 	VdpYCbCrFormat source_format;
 	yuv_data_t *yuv;
-	int luma_size;
+	int luma_size, chroma_size;
+	struct ve_mem *rec;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 } video_surface_ctx_t;
@@ -169,6 +170,7 @@ VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder);
 void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);
 VdpStatus yuv_prepare(video_surface_ctx_t *video_surface);
+VdpStatus rec_prepare(video_surface_ctx_t *video_surface);
 
 typedef uint32_t VdpHandle;
 

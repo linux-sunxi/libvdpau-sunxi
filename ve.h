@@ -54,6 +54,7 @@ static inline uint32_t readl(void *addr)
 #define VE_ENGINE_H264			0x1
 
 #define VE_CTRL				0x000
+#define VE_EXTRA_OUT_FMT_OFFSET		0x0e8
 #define VE_VERSION			0x0f0
 
 #define VE_MPEG_PIC_HDR			0x100
@@ -101,6 +102,8 @@ static inline uint32_t readl(void *addr)
 #define VE_H264_VLD_LEN			0x238
 #define VE_H264_VLD_END			0x23c
 #define VE_H264_SDROT_CTRL		0x240
+#define VE_H264_SDROT_LUMA		0x244
+#define VE_H264_SDROT_CHROMA		0x248
 #define VE_H264_OUTPUT_FRAME_IDX	0x24c
 #define VE_H264_EXTRA_BUFFER1		0x250
 #define VE_H264_EXTRA_BUFFER2		0x254

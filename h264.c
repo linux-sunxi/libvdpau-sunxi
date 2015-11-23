@@ -672,8 +672,8 @@ static void fill_frame_lists(h264_context_t *c)
 			writel((uint16_t)c->info->field_order_cnt[0], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((uint16_t)c->info->field_order_cnt[1], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(output_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->output->yuv->data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->output->yuv->data->phys + c->output->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(c->output->rec->phys, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(c->output->rec->phys + c->output->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(output_p->extra_data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(output_p->extra_data->phys + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
@@ -695,8 +695,8 @@ static void fill_frame_lists(h264_context_t *c)
 			writel(frame_list[i]->top_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(frame_list[i]->bottom_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(surface_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface->yuv->data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface->yuv->data->phys + surface->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(surface->rec->phys, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(surface->rec->phys + surface->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(surface_p->extra_data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(surface_p->extra_data->phys + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
@@ -734,6 +734,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	VdpPictureInfoH264 const *info = (VdpPictureInfoH264 const *)_info;
 
 	VdpStatus ret = yuv_prepare(output);
+	if (ret != VDP_STATUS_OK)
+		return ret;
+
+	ret = rec_prepare(output);
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
@@ -792,6 +796,12 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 	// sdctrl
 	writel(0x00000000, c->regs + VE_H264_SDROT_CTRL);
+	if (ve_get_version() == 0x1680)
+	{
+		writel(c->output->yuv->data->phys, c->regs + VE_H264_SDROT_LUMA);
+		writel(c->output->yuv->data->phys + c->output->luma_size, c->regs + VE_H264_SDROT_CHROMA);
+		writel((0x2 << 30) | (0x1 << 28) | (c->output->chroma_size / 2), c->regs + VE_EXTRA_OUT_FMT_OFFSET);
+	}
 
 	fill_frame_lists(c);
 
@@ -813,7 +823,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		}
 
 		// Enable startcode detect and ??
-		writel((0x1 << 25) | (0x1 << 10), c->regs + VE_H264_CTRL);
+		writel((0x1 << 25) | (0x1 << 10) | ((ve_get_version() == 0x1680) << 9), c->regs + VE_H264_CTRL);
 
 		// input buffer
 		writel((len - pos) * 8, c->regs + VE_H264_VLD_LEN);

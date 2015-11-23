@@ -159,6 +159,10 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
+	ret = rec_prepare(output);
+	if (ret != VDP_STATUS_OK)
+		return ret;
+
 	bitstream bs = { .data = decoder->data->virt, .length = len, .bitpos = 0 };
 
 	while (find_startcode(&bs))
@@ -179,13 +183,15 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(decoder_p->ncf_buffer->phys, ve_regs + VE_MPEG_NCF_ADDR);
 
 		// set output buffers
-		writel(output->yuv->data->phys, ve_regs + VE_MPEG_REC_LUMA);
-		writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
+		writel(output->rec->phys, ve_regs + VE_MPEG_REC_LUMA);
+		writel(output->rec->phys + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
 		writel(output->yuv->data->phys, ve_regs + VE_MPEG_ROT_LUMA);
 		writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
+		if (ve_get_version() == 0x1680)
+			writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
 
 		// set vop header
 		writel(((hdr.vop_coding_type == VOP_B ? 0x1 : 0x0) << 28)
@@ -211,7 +217,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(0x0, ve_regs + VE_MPEG_MBA);
 
 		// enable interrupt, unknown control flags
-		writel(0x80084198 | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
+		writel(0x80084118 | ((ve_get_version() != 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
 
 		// set quantization parameter
 		writel(hdr.vop_quant, ve_regs + VE_MPEG_QP_INPUT);
@@ -220,14 +226,14 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *forward = handle_get(info->forward_reference);
-			writel(forward->yuv->data->phys, ve_regs + VE_MPEG_FWD_LUMA);
-			writel(forward->yuv->data->phys + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
+			writel(forward->rec->phys, ve_regs + VE_MPEG_FWD_LUMA);
+			writel(forward->rec->phys + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *backward = handle_get(info->backward_reference);
-			writel(backward->yuv->data->phys, ve_regs + VE_MPEG_BACK_LUMA);
-			writel(backward->yuv->data->phys + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
+			writel(backward->rec->phys, ve_regs + VE_MPEG_BACK_LUMA);
+			writel(backward->rec->phys + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
 		// set trb/trd
