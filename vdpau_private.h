@@ -29,6 +29,7 @@
 #include <vdpau/vdpau_x11.h>
 #include <X11/Xlib.h>
 #include "ve.h"
+#include "kernel-headers/sunxi_display2.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
@@ -77,8 +78,9 @@ typedef struct
 {
 	Drawable drawable;
 	int fd;
-	int layer;
-	int layer_top;
+	/*int layer;
+	int layer_top;*/
+	disp_layer_config layer;
 } queue_target_ctx_t;
 
 typedef struct

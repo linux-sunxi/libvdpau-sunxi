@@ -23,7 +23,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include "kernel-headers/sunxi_disp_ioctl.h"
+//#include "kernel-headers/sunxi_disp_ioctl.h"
+#include "kernel-headers/sunxi_display2.h"
 #include "ve.h"
 #include "rgba.h"
 
@@ -60,7 +61,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		return VDP_STATUS_ERROR;
 	}
 
-	int tmp = SUNXI_DISP_VERSION;
+	/*int tmp = SUNXI_DISP_VERSION;
 	if (ioctl(qt->fd, DISP_CMD_VERSION, &tmp) < 0)
 	{
 		close(qt->fd);
@@ -74,9 +75,28 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		goto out_layer;
 
 	args[1] = qt->layer;
-	ioctl(qt->fd, dev->osd_enabled ? DISP_CMD_LAYER_TOP : DISP_CMD_LAYER_BOTTOM, args);
+	ioctl(qt->fd, dev->osd_enabled ? DISP_CMD_LAYER_TOP : DISP_CMD_LAYER_BOTTOM, args);*/
 
-	if (dev->osd_enabled)
+	unsigned long args[4] = { 0, (unsigned long)(&qt->layer), 1, 0 };
+
+	qt->layer.info.mode = LAYER_MODE_BUFFER;
+	qt->layer.info.alpha_mode = 1;
+	qt->layer.info.alpha_value = 255;
+
+	qt->layer.enable = 0;
+	qt->layer.channel = 0;
+	qt->layer.layer_id = 0;
+	qt->layer.info.zorder = 1;
+
+	if (ioctl(qt->fd, DISP_LAYER_SET_CONFIG, args))
+	{
+		perror("DISP_LAYER_SET_CONFIG failed");
+		close(qt->fd);
+		handle_destroy(*target);
+		return VDP_STATUS_ERROR;
+	}
+
+	/*if (dev->osd_enabled)
 	{
 		args[1] = DISP_LAYER_WORK_MODE_NORMAL;
 		qt->layer_top = ioctl(qt->fd, DISP_CMD_LAYER_REQUEST, args);
@@ -85,11 +105,11 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 
 		args[1] = qt->layer_top;
 		ioctl(qt->fd, DISP_CMD_LAYER_TOP, args);
-	}
+	}*/
 
 	XSetWindowBackground(dev->display, drawable, 0x000102);
 
-	if (!dev->osd_enabled)
+	/*if (!dev->osd_enabled)
 	{
 		__disp_colorkey_t ck;
 		ck.ck_max.red = ck.ck_min.red = 0;
@@ -101,18 +121,18 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 
 		args[1] = (unsigned long)(&ck);
 		ioctl(qt->fd, DISP_CMD_SET_COLORKEY, args);
-	}
+	}*/
 
 
 	return VDP_STATUS_OK;
 
-out_layer_top:
+/*out_layer_top:
 	args[1] = qt->layer;
 	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
 out_layer:
 	close(qt->fd);
 	handle_destroy(*target);
-	return VDP_STATUS_RESOURCES;
+	return VDP_STATUS_RESOURCES;*/
 }
 
 VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget presentation_queue_target)
@@ -121,7 +141,7 @@ VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget prese
 	if (!qt)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	uint32_t args[4] = { 0, qt->layer, 0, 0 };
+	/*uint32_t args[4] = { 0, qt->layer, 0, 0 };
 	ioctl(qt->fd, DISP_CMD_LAYER_CLOSE, args);
 	ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
 
@@ -130,7 +150,14 @@ VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget prese
 		args[1] = qt->layer_top;
 		ioctl(qt->fd, DISP_CMD_LAYER_CLOSE, args);
 		ioctl(qt->fd, DISP_CMD_LAYER_RELEASE, args);
-	}
+	}*/
+
+	unsigned long args[4] = { 0, (unsigned long)(&qt->layer), 1, 0 };
+
+	qt->layer.enable = 0;
+
+	if (ioctl(qt->fd, DISP_LAYER_SET_CONFIG, args))
+		perror("DISP_LAYER_SET_CONFIG failed");
 
 	close(qt->fd);
 
@@ -247,7 +274,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	if (os->vs)
 	{
 		// VIDEO layer
-		__disp_layer_info_t layer_info;
+		/*__disp_layer_info_t layer_info;
 		memset(&layer_info, 0, sizeof(layer_info));
 		layer_info.pipe = q->device->osd_enabled ? 0 : 1;
 		layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
@@ -324,18 +351,70 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 			ioctl(q->target->fd, DISP_CMD_LAYER_SET_HUE, args);
 			ioctl(q->target->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
 			os->csc_change = 0;
+		}*/
+
+		unsigned long args[4] = { 0, (unsigned long)(&q->target->layer), 1, 0 };
+		switch (os->vs->source_format)
+		{
+		case VDP_YCBCR_FORMAT_YUYV:
+			q->target->layer.info.fb.format = DISP_FORMAT_YUV422_I_YUYV;
+			break;
+		case VDP_YCBCR_FORMAT_UYVY:
+			q->target->layer.info.fb.format = DISP_FORMAT_YUV422_I_UYVY;
+			break;
+		case VDP_YCBCR_FORMAT_NV12:
+			q->target->layer.info.fb.format = DISP_FORMAT_YUV420_SP_UVUV;
+			break;
+		case VDP_YCBCR_FORMAT_YV12:
+		default:
+		case INTERNAL_YCBCR_FORMAT:
+			q->target->layer.info.fb.format = DISP_FORMAT_YUV420_P;
+			break;
 		}
+
+		q->target->layer.info.fb.addr[0] = os->yuv->data->phys;
+		q->target->layer.info.fb.addr[1] = os->yuv->data->phys + os->vs->luma_size;
+		q->target->layer.info.fb.addr[2] = os->yuv->data->phys + os->vs->luma_size + os->vs->chroma_size / 2;
+
+		q->target->layer.info.fb.size[0].width = os->vs->width;
+		q->target->layer.info.fb.size[0].height = os->vs->height;
+		q->target->layer.info.fb.align[0] = 32;
+		q->target->layer.info.fb.size[1].width = os->vs->width / 2;
+		q->target->layer.info.fb.size[1].height = os->vs->height / 2;
+		q->target->layer.info.fb.align[1] = 16;
+		q->target->layer.info.fb.size[2].width = os->vs->width / 2;
+		q->target->layer.info.fb.size[2].height = os->vs->height / 2;
+		q->target->layer.info.fb.align[2] = 16;
+		q->target->layer.info.fb.crop.x = (unsigned long long)(os->video_src_rect.x0) << 32;
+		q->target->layer.info.fb.crop.y = (unsigned long long)(os->video_src_rect.y0) << 32;
+		q->target->layer.info.fb.crop.width = (unsigned long long)(os->video_src_rect.x1 - os->video_src_rect.x0) << 32;
+		q->target->layer.info.fb.crop.height = (unsigned long long)(os->video_src_rect.y1 - os->video_src_rect.y0) << 32;
+		q->target->layer.info.screen_win.x = x + os->video_dst_rect.x0;
+		q->target->layer.info.screen_win.y = y + os->video_dst_rect.y0;
+		q->target->layer.info.screen_win.width = os->video_dst_rect.x1 - os->video_dst_rect.x0;
+		q->target->layer.info.screen_win.height = os->video_dst_rect.y1 - os->video_dst_rect.y0;
+		q->target->layer.enable = 1;
+
+		if (ioctl(q->target->fd, DISP_LAYER_SET_CONFIG, args))
+			perror("DISP_LAYER_SET_CONFIG failed");
 	}
 	else
 	{
-		uint32_t args[4] = { 0, q->target->layer, 0, 0 };
-		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
+		/*uint32_t args[4] = { 0, q->target->layer, 0, 0 };
+		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);*/
+
+		unsigned long args[4] = { 0, (unsigned long)(&q->target->layer), 1, 0 };
+
+		q->target->layer.enable = 0;
+
+		if (ioctl(q->target->fd, DISP_LAYER_SET_CONFIG, args))
+			perror("DISP_LAYER_SET_CONFIG failed");
 	}
 
 	if (!q->device->osd_enabled)
 		return VDP_STATUS_OK;
 
-	if (os->rgba.flags & RGBA_FLAG_NEEDS_CLEAR)
+	/*if (os->rgba.flags & RGBA_FLAG_NEEDS_CLEAR)
 		rgba_clear(&os->rgba);
 
 	if (os->rgba.flags & RGBA_FLAG_DIRTY)
@@ -382,7 +461,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	{
 		uint32_t args[4] = { 0, q->target->layer_top, 0, 0 };
 		ioctl(q->target->fd, DISP_CMD_LAYER_CLOSE, args);
-	}
+	}*/
 
 	return VDP_STATUS_OK;
 }
