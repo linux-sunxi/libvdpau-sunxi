@@ -52,6 +52,7 @@ static inline uint32_t readl(void *addr)
 
 #define VE_ENGINE_MPEG			0x0
 #define VE_ENGINE_H264			0x1
+#define VE_ENGINE_HEVC			0x4
 
 #define VE_CTRL				0x000
 #define VE_EXTRA_OUT_FMT_OFFSET		0x0e8
@@ -116,5 +117,40 @@ static inline uint32_t readl(void *addr)
 #define VE_SRAM_H264_REF_LIST0		0x640
 #define VE_SRAM_H264_REF_LIST1		0x664
 #define VE_SRAM_H264_SCALING_LISTS	0x800
+
+#define VE_HEVC_NAL_HDR			0x500
+#define VE_HEVC_SPS			0x504
+#define VE_HEVC_PIC_SIZE		0x508
+#define VE_HEVC_PCM_HDR			0x50c
+#define VE_HEVC_PPS0			0x510
+#define VE_HEVC_PPS1			0x514
+#define VE_HEVC_SLICE_HDR0		0x520
+#define VE_HEVC_SLICE_HDR1		0x524
+#define VE_HEVC_SLICE_HDR2		0x528
+#define VE_HEVC_CTB_ADDR		0x52c
+#define VE_HEVC_CTRL			0x530
+#define VE_HEVC_TRIG			0x534
+#define VE_HEVC_STATUS			0x538
+#define VE_HEVC_CTU_NUM			0x53c
+#define VE_HEVC_BITS_ADDR		0x540
+#define VE_HEVC_BITS_OFFSET		0x544
+#define VE_HEVC_BITS_LEN		0x548
+#define VE_HEVC_BITS_END_ADDR		0x54c
+#define VE_HEVC_REC_BUF_IDX 		0x55c
+#define VE_HEVC_NEIGHBOR_INFO_ADDR	0x560
+#define VE_HEVC_TILE_LIST_ADDR		0x564
+#define VE_HEVC_TILE_START_CTB		0x568
+#define VE_HEVC_TILE_END_CTB		0x56c
+#define VE_HEVC_BITS_DATA		0x5dc
+#define VE_HEVC_SRAM_ADDR		0x5e0
+#define VE_HEVC_SRAM_DATA		0x5e4
+
+#define VE_SRAM_HEVC_PRED_WEIGHT_LUMA_L0	0x000
+#define VE_SRAM_HEVC_PRED_WEIGHT_CHROMA_L0	0x020
+#define VE_SRAM_HEVC_PRED_WEIGHT_LUMA_L1	0x060
+#define VE_SRAM_HEVC_PRED_WEIGHT_CHROMA_L1	0x080
+#define VE_SRAM_HEVG_PIC_LIST			0x400
+#define VE_SRAM_HEVC_REF_PIC_LIST0		0xc00
+#define VE_SRAM_HEVC_REF_PIC_LIST1		0xc10
 
 #endif

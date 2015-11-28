@@ -152,7 +152,13 @@ typedef struct
            __typeof__ (b) _b = (b); \
            _a < _b ? (_a == 0 ? _b : _a) : (_b == 0 ? _a : _b); })
 
+#define clamp(val, lo, hi) min((typeof(val))max(val, lo), hi)
+
+#define ceil_log2(n) ((n) <= 1 ? 0 : 32 - __builtin_clz((n) - 1))
+
 #define ALIGN(x, a) (((x) + ((typeof(x))(a) - 1)) & ~((typeof(x))(a) - 1))
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -168,6 +174,7 @@ typedef struct
 VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
 VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder);
+VdpStatus new_decoder_h265(decoder_ctx_t *decoder);
 
 void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);
