@@ -66,9 +66,13 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
                                video_surface_ctx_t *output)
 {
 	VdpPictureInfoMPEG1Or2 const *info = (VdpPictureInfoMPEG1Or2 const *)_info;
-	int start_offset = mpeg_find_startcode(decoder->data, len);
+	int start_offset = mpeg_find_startcode(decoder->data->virt, len);
 
 	VdpStatus ret = yuv_prepare(output);
+	if (ret != VDP_STATUS_OK)
+		return ret;
+
+	ret = rec_prepare(output);
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
@@ -111,27 +115,29 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 	writel(pic_header, ve_regs + VE_MPEG_PIC_HDR);
 
 	// ??
-	writel(0x800001b8, ve_regs + VE_MPEG_CTRL);
+	writel(0x80000138 | ((ve_get_version() != 0x1680) << 7), ve_regs + VE_MPEG_CTRL);
+	if (ve_get_version() == 0x1680)
+		writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
 
 	// set forward/backward predicion buffers
 	if (info->forward_reference != VDP_INVALID_HANDLE)
 	{
 		video_surface_ctx_t *forward = handle_get(info->forward_reference);
-		writel(ve_virt2phys(forward->yuv->data), ve_regs + VE_MPEG_FWD_LUMA);
-		writel(ve_virt2phys(forward->yuv->data + forward->luma_size), ve_regs + VE_MPEG_FWD_CHROMA);
+		writel(forward->rec->phys, ve_regs + VE_MPEG_FWD_LUMA);
+		writel(forward->rec->phys + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 	}
 	if (info->backward_reference != VDP_INVALID_HANDLE)
 	{
 		video_surface_ctx_t *backward = handle_get(info->backward_reference);
-		writel(ve_virt2phys(backward->yuv->data), ve_regs + VE_MPEG_BACK_LUMA);
-		writel(ve_virt2phys(backward->yuv->data + backward->luma_size), ve_regs + VE_MPEG_BACK_CHROMA);
+		writel(backward->rec->phys, ve_regs + VE_MPEG_BACK_LUMA);
+		writel(backward->rec->phys + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 	}
 
 	// set output buffers (Luma / Croma)
-	writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_REC_LUMA);
-	writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_REC_CHROMA);
-	writel(ve_virt2phys(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
-	writel(ve_virt2phys(output->yuv->data + output->luma_size), ve_regs + VE_MPEG_ROT_CHROMA);
+	writel(output->rec->phys, ve_regs + VE_MPEG_REC_LUMA);
+	writel(output->rec->phys + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
+	writel(output->yuv->data->phys, ve_regs + VE_MPEG_ROT_LUMA);
+	writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
 
 	// set input offset in bits
 	writel(start_offset * 8, ve_regs + VE_MPEG_VLD_OFFSET);
@@ -140,7 +146,7 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 	writel((len - start_offset) * 8, ve_regs + VE_MPEG_VLD_LEN);
 
 	// input end
-	uint32_t input_addr = ve_virt2phys(decoder->data);
+	uint32_t input_addr = decoder->data->phys;
 	writel(input_addr + VBV_SIZE - 1, ve_regs + VE_MPEG_VLD_END);
 
 	// set input buffer

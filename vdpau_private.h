@@ -28,6 +28,8 @@
 #include <vdpau/vdpau.h>
 #include <vdpau/vdpau_x11.h>
 #include <X11/Xlib.h>
+#include "ve.h"
+#include "sunxi_disp.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
@@ -45,7 +47,7 @@ typedef struct
 typedef struct
 {
 	int ref_count;
-	void *data;
+	struct ve_mem *data;
 } yuv_data_t;
 
 typedef struct video_surface_ctx_struct
@@ -55,7 +57,8 @@ typedef struct video_surface_ctx_struct
 	VdpChromaType chroma_type;
 	VdpYCbCrFormat source_format;
 	yuv_data_t *yuv;
-	int luma_size;
+	int luma_size, chroma_size;
+	struct ve_mem *rec;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 } video_surface_ctx_t;
@@ -64,7 +67,7 @@ typedef struct decoder_ctx_struct
 {
 	uint32_t width, height;
 	VdpDecoderProfile profile;
-	void *data;
+	struct ve_mem *data;
 	device_ctx_t *device;
 	VdpStatus (*decode)(struct decoder_ctx_struct *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
 	void *private;
@@ -74,9 +77,7 @@ typedef struct decoder_ctx_struct
 typedef struct
 {
 	Drawable drawable;
-	int fd;
-	int layer;
-	int layer_top;
+	struct sunxi_disp *disp;
 } queue_target_ctx_t;
 
 typedef struct
@@ -105,12 +106,12 @@ typedef struct
 	device_ctx_t *device;
 	VdpRGBAFormat format;
 	uint32_t width, height;
-	void *data;
+	struct ve_mem *data;
 	VdpRect dirty;
 	uint32_t flags;
 } rgba_surface_t;
 
-typedef struct
+typedef struct output_surface_ctx_struct
 {
 	rgba_surface_t rgba;
 	video_surface_ctx_t *vs;
@@ -148,7 +149,13 @@ typedef struct
            __typeof__ (b) _b = (b); \
            _a < _b ? (_a == 0 ? _b : _a) : (_b == 0 ? _a : _b); })
 
+#define clamp(val, lo, hi) min((typeof(val))max(val, lo), hi)
+
+#define ceil_log2(n) ((n) <= 1 ? 0 : 32 - __builtin_clz((n) - 1))
+
 #define ALIGN(x, a) (((x) + ((typeof(x))(a) - 1)) & ~((typeof(x))(a) - 1))
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -164,10 +171,12 @@ typedef struct
 VdpStatus new_decoder_mpeg12(decoder_ctx_t *decoder);
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder);
 VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder);
+VdpStatus new_decoder_h265(decoder_ctx_t *decoder);
 
 void yuv_unref(yuv_data_t *yuv);
 yuv_data_t *yuv_ref(yuv_data_t *yuv);
 VdpStatus yuv_prepare(video_surface_ctx_t *video_surface);
+VdpStatus rec_prepare(video_surface_ctx_t *video_surface);
 
 typedef uint32_t VdpHandle;
 

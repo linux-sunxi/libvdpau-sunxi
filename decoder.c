@@ -70,6 +70,13 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 		ret = new_decoder_mpeg4(dec);
 		break;
 
+	case VDP_DECODER_PROFILE_HEVC_MAIN:
+		if (ve_get_version() == 0x1680)
+			ret = new_decoder_h265(dec);
+		else
+			ret = VDP_STATUS_INVALID_DECODER_PROFILE;
+		break;
+
 	default:
 		ret = VDP_STATUS_INVALID_DECODER_PROFILE;
 		break;
@@ -144,10 +151,10 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 
 	for (i = 0; i < bitstream_buffer_count; i++)
 	{
-		memcpy(dec->data + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
+		memcpy(dec->data->virt + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
 		pos += bitstream_buffers[i].bitstream_bytes;
 	}
-	ve_flush_cache(dec->data, pos);
+	ve_flush_cache(dec->data);
 
 	return dec->decode(dec, picture_info, pos, vid);
 }
@@ -194,6 +201,13 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 	case VDP_DECODER_PROFILE_MPEG4_PART2_ASP:
 		*max_level = VDP_DECODER_LEVEL_MPEG4_PART2_ASP_L5;
 		*is_supported = VDP_TRUE;
+		break;
+	case VDP_DECODER_PROFILE_HEVC_MAIN:
+		*max_level = VDP_DECODER_LEVEL_HEVC_5;
+		if (ve_get_version() == 0x1680)
+			*is_supported = VDP_TRUE;
+		else
+			*is_supported = VDP_FALSE;
 		break;
 
 	default:
