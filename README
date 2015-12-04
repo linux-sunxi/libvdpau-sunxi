@@ -1,23 +1,37 @@
 This is an experimental VDPAU implementation for sunxi SoCs.
 
-Most features of full VDPAU are missing, only decoding of h264, mpeg1 and
-mpeg2 and output of software-decoded videos will work.
-Output bypasses X video driver, hence don't try to use Xv
-at the same time.
-Only tested with mplayer, if other players need unimplemented functions
-something will fail.
+It supports decoding of MPEG1 and MPEG2, some limited MPEG4 types,
+H.264 and on the H3 SoC it also decodes H.265.
+
+
+Requirements:
+
+   libvdpau >= 1.1
+
+
+Installation:
 
    $ make
    $ make install
 
+
+Usage:
+
    $ export VDPAU_DRIVER=sunxi
 
-and then for mplayer:
-   $ mplayer -vo vdpau -vc ffmpeg12vdpau,ffh264vdpau, [filename]
-or for mpv:
    $ mpv --vo=vdpau --hwdec=vdpau --hwdec-codecs=all [filename]
 
 Note: Make sure that you have write access to both /dev/disp and /dev/cedar_dev
+
+
+Limitations:
+
+Output bypasses X video driver by opening own disp layers.
+You can't use Xv from fbturbo at the same time, and on H3 the video is
+always on top and can't be overlapped by other windows.
+
+
+OSD Support (not available on H3):
 
 To enable OSD support for e.g. subtitles, set VDPAU_OSD environment
 variable to 1:
@@ -27,3 +41,4 @@ This partly breaks X11 integration due to hardware limitations. The video
 area can't be overlapped by other windows. For fullscreen use this is no
 problem.
 Note: this needs G2D, so make sure that you have write access to /dev/g2d.
+
