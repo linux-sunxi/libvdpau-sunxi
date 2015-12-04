@@ -29,7 +29,7 @@
 #include <vdpau/vdpau_x11.h>
 #include <X11/Xlib.h>
 #include "ve.h"
-#include "kernel-headers/sunxi_display2.h"
+#include "sunxi_disp.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
@@ -77,10 +77,7 @@ typedef struct decoder_ctx_struct
 typedef struct
 {
 	Drawable drawable;
-	int fd;
-	/*int layer;
-	int layer_top;*/
-	disp_layer_config layer;
+	struct sunxi_disp *disp;
 } queue_target_ctx_t;
 
 typedef struct
@@ -114,7 +111,7 @@ typedef struct
 	uint32_t flags;
 } rgba_surface_t;
 
-typedef struct
+typedef struct output_surface_ctx_struct
 {
 	rgba_surface_t rgba;
 	video_surface_ctx_t *vs;
