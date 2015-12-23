@@ -293,6 +293,8 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		break;
 	}
 
+	ve_flush_cache(vs->yuv->data);
+
 	return VDP_STATUS_OK;
 }
 
