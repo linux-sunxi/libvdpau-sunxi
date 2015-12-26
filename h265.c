@@ -432,7 +432,7 @@ static void write_pic_list(struct h265_private *p)
 			video_surface_ctx_t *v = handle_get(p->info->RefPics[i]);
 			struct h265_video_private *vp = get_surface_priv(p, v);
 
-			writel(VE_SRAM_HEVG_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
+			writel(VE_SRAM_HEVC_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
 			writel(p->info->PicOrderCntVal[i], p->regs + VE_HEVC_SRAM_DATA);
 			writel(p->info->PicOrderCntVal[i], p->regs + VE_HEVC_SRAM_DATA);
 			writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
@@ -444,7 +444,7 @@ static void write_pic_list(struct h265_private *p)
 
 	struct h265_video_private *vp = get_surface_priv(p, p->output);
 
-	writel(VE_SRAM_HEVG_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
+	writel(VE_SRAM_HEVC_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
 	writel(p->info->CurrPicOrderCntVal, p->regs + VE_HEVC_SRAM_DATA);
 	writel(p->info->CurrPicOrderCntVal, p->regs + VE_HEVC_SRAM_DATA);
 	writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
