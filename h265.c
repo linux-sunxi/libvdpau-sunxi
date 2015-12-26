@@ -616,6 +616,99 @@ static void write_weighted_pred(struct h265_private *p)
 	}
 }
 
+static void write_scaling_lists(struct h265_private *p)
+{
+	static const uint8_t diag4x4[16] = {
+		 0,  1,  3,  6,
+		 2,  4,  7, 10,
+		 5,  8, 11, 13,
+		 9, 12, 14, 15,
+	};
+
+	static const uint8_t diag8x8[64] = {
+		 0,  1,  3,  6, 10, 15, 21, 28,
+		 2,  4,  7, 11, 16, 22, 29, 36,
+		 5,  8, 12, 17, 23, 30, 37, 43,
+		 9, 13, 18, 24, 31, 38, 44, 49,
+		14, 19, 25, 32, 39, 45, 50, 54,
+		20, 26, 33, 40, 46, 51, 55, 58,
+		27, 34, 41, 47, 52, 56, 59, 61,
+		35, 42, 48, 53, 57, 60, 62, 63,
+	};
+
+	uint32_t i, j, word = 0x0;
+
+	writel((p->info->ScalingListDCCoeff32x32[1] << 24) |
+		(p->info->ScalingListDCCoeff32x32[0] << 16) |
+		(p->info->ScalingListDCCoeff16x16[1] << 8) |
+		(p->info->ScalingListDCCoeff16x16[0] << 0), p->regs + VE_HEVC_SCALING_LIST_DC_COEF0);
+
+	writel((p->info->ScalingListDCCoeff16x16[5] << 24) |
+		(p->info->ScalingListDCCoeff16x16[4] << 16) |
+		(p->info->ScalingListDCCoeff16x16[3] << 8) |
+		(p->info->ScalingListDCCoeff16x16[2] << 0), p->regs + VE_HEVC_SCALING_LIST_DC_COEF1);
+
+	writel(VE_SRAM_HEVC_SCALING_LISTS, p->regs + VE_HEVC_SRAM_ADDR);
+
+	for (i = 0; i < 6; i++)
+	{
+		for (j = 0; j < 64; j++)
+		{
+			word |= p->info->ScalingList8x8[i][diag8x8[j]] << ((j % 4) * 8);
+
+			if (j % 4 == 3)
+			{
+				writel(word, p->regs + VE_HEVC_SRAM_DATA);
+				word = 0x0;
+			}
+		}
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		for (j = 0; j < 64; j++)
+		{
+			word |= p->info->ScalingList32x32[i][diag8x8[j]] << ((j % 4) * 8);
+
+			if (j % 4 == 3)
+			{
+				writel(word, p->regs + VE_HEVC_SRAM_DATA);
+				word = 0x0;
+			}
+		}
+	}
+
+	for (i = 0; i < 6; i++)
+	{
+		for (j = 0; j < 64; j++)
+		{
+			word |= p->info->ScalingList16x16[i][diag8x8[j]] << ((j % 4) * 8);
+
+			if (j % 4 == 3)
+			{
+				writel(word, p->regs + VE_HEVC_SRAM_DATA);
+				word = 0x0;
+			}
+		}
+	}
+
+	for (i = 0; i < 6; i++)
+	{
+		for (j = 0; j < 16; j++)
+		{
+			word |= p->info->ScalingList4x4[i][diag4x4[j]] << ((j % 4) * 8);
+
+			if (j % 4 == 3)
+			{
+				writel(word, p->regs + VE_HEVC_SRAM_DATA);
+				word = 0x0;
+			}
+		}
+	}
+
+	writel((0x1 << 31), p->regs + VE_HEVC_SCALING_LIST_CTRL);
+}
+
 static VdpStatus h265_decode(decoder_ctx_t *decoder,
                              VdpPictureInfo const *_info,
                              const int len,
@@ -684,7 +777,10 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 			((p->info->weighted_bipred_flag & 0x1) << 1) |
 			((p->info->weighted_pred_flag & 0x1) << 0), p->regs + VE_HEVC_PPS1);
 
-		writel(0x40000000, p->regs + 0x518);
+		if (p->info->scaling_list_enabled_flag)
+			write_scaling_lists(p);
+		else
+			writel((0x1 << 30), p->regs + VE_HEVC_SCALING_LIST_CTRL);
 
 		writel(((p->slice.five_minus_max_num_merge_cand & 0x7) << 24) |
 			((p->slice.num_ref_idx_l1_active_minus1 & 0xf) << 20) |
