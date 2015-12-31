@@ -796,7 +796,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 	// sdctrl
 	writel(0x00000000, c->regs + VE_H264_SDROT_CTRL);
-	if (ve_get_version() == 0x1680)
+	if (ve_get_version() >= 0x1667)
 	{
 		writel(c->output->yuv->data->phys, c->regs + VE_H264_SDROT_LUMA);
 		writel(c->output->yuv->data->phys + c->output->luma_size, c->regs + VE_H264_SDROT_CHROMA);
@@ -823,7 +823,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		}
 
 		// Enable startcode detect and ??
-		writel((0x1 << 25) | (0x1 << 10) | ((ve_get_version() == 0x1680) << 9), c->regs + VE_H264_CTRL);
+		writel((0x1 << 25) | (0x1 << 10) | ((ve_get_version() >= 0x1667) << 9), c->regs + VE_H264_CTRL);
 
 		// input buffer
 		writel((len - pos) * 8, c->regs + VE_H264_VLD_LEN);

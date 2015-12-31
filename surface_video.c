@@ -70,7 +70,7 @@ VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
 
 VdpStatus rec_prepare(video_surface_ctx_t *video_surface)
 {
-	if (ve_get_version() == 0x1680)
+	if (ve_get_version() >= 0x1667)
 	{
 		if (!video_surface->rec)
 		{

@@ -115,8 +115,8 @@ static VdpStatus mpeg12_decode(decoder_ctx_t *decoder,
 	writel(pic_header, ve_regs + VE_MPEG_PIC_HDR);
 
 	// ??
-	writel(0x80000138 | ((ve_get_version() != 0x1680) << 7), ve_regs + VE_MPEG_CTRL);
-	if (ve_get_version() == 0x1680)
+	writel(0x80000138 | ((ve_get_version() < 0x1667) << 7), ve_regs + VE_MPEG_CTRL);
+	if (ve_get_version() >= 0x1667)
 		writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
 
 	// set forward/backward predicion buffers
