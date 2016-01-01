@@ -57,7 +57,7 @@ struct sunxi_disp *sunxi_disp1_5_open(int osd_enabled)
 	disp->layer_id = 1;
 	args[1] = disp->layer_id;
 
-	disp->video_info.mode = DISP_LAYER_WORK_MODE_SCALER;//LAYER_MODE_BUFFER;
+	disp->video_info.mode = DISP_LAYER_WORK_MODE_SCALER;
 	disp->video_info.alpha_mode = 1;
 	disp->video_info.alpha_value = 255;
 	disp->video_info.pipe = 1;
@@ -114,9 +114,11 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 	case VDP_YCBCR_FORMAT_NV12:
 		disp->video_info.fb.format = DISP_FORMAT_YUV420_SP_UVUV;
 		break;
+	case INTERNAL_YCBCR_FORMAT:
+		disp->video_info.fb.format = DISP_FORMAT_YUV420_SP_TILE_UVUV;
+		break;
 	case VDP_YCBCR_FORMAT_YV12:
 	default:
-	case INTERNAL_YCBCR_FORMAT:
 		disp->video_info.fb.format = DISP_FORMAT_YUV420_P;
 		break;
 	}
@@ -127,17 +129,14 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 
 	disp->video_info.fb.size.width = surface->vs->width;
 	disp->video_info.fb.size.height = surface->vs->height;
-/*	disp->video_info.fb.crop.x = (unsigned long long)(surface->video_src_rect.x0) << 32;
-	disp->video_info.fb.crop.y = (unsigned long long)(surface->video_src_rect.y0) << 32;
-	disp->video_info.fb.crop.width = (unsigned long long)(surface->video_src_rect.x1 - surface->video_src_rect.x0) << 32;
-	disp->video_info.fb.crop.height = (unsigned long long)(surface->video_src_rect.y1 - surface->video_src_rect.y0) << 32;*/
+	disp->video_info.fb.src_win.x = surface->video_src_rect.x0;
+	disp->video_info.fb.src_win.y = surface->video_src_rect.y0;
+	disp->video_info.fb.src_win.width = surface->video_src_rect.x1 - surface->video_src_rect.x0;
+	disp->video_info.fb.src_win.height = surface->video_src_rect.y1 - surface->video_src_rect.y0;
 	disp->video_info.screen_win.x = x + surface->video_dst_rect.x0;
 	disp->video_info.screen_win.y = y + surface->video_dst_rect.y0;
 	disp->video_info.screen_win.width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0;
 	disp->video_info.screen_win.height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0;
-	disp->video_info.fb.src_win.x = disp->video_info.fb.src_win.y = 0;
-	disp->video_info.fb.src_win.width = surface->vs->width;
-	disp->video_info.fb.src_win.height = surface->vs->height;
 	disp->video_info.fb.pre_multiply = 1;
 
 	if (ioctl(disp->fd, DISP_CMD_LAYER_ENABLE, args))
