@@ -624,7 +624,7 @@ static void decode_slice_header(h264_context_t *c)
 }
 
 
-static void fill_frame_lists(h264_context_t *c)
+static int fill_frame_lists(h264_context_t *c)
 {
 	int i;
 	h264_video_private_t *output_p = (h264_video_private_t *)c->output->decoder_private;
@@ -645,6 +645,8 @@ static void fill_frame_lists(h264_context_t *c)
 
 			video_surface_ctx_t *surface = handle_get(rf->surface);
 			h264_video_private_t *surface_p = get_surface_priv(c, surface);
+			if (!surface_p)
+				return 0;
 
 			if (surface == c->output)
 				output_placed = 1;
@@ -705,6 +707,8 @@ static void fill_frame_lists(h264_context_t *c)
 
 	// output index
 	writel(output_p->pos, c->regs + VE_H264_OUTPUT_FRAME_IDX);
+
+	return 1;
 }
 
 // VDPAU does not tell us if the scaling lists are default or custom
@@ -754,8 +758,8 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 	h264_video_private_t *output_p = get_surface_priv(c, output);
 	if (!output_p)
 	{
-		free(c);
-		return VDP_STATUS_RESOURCES;
+		ret = VDP_STATUS_RESOURCES;
+		goto err_free;
 	}
 
 	if (info->field_pic_flag)
@@ -806,7 +810,11 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		writel((0x2 << 30) | (0x1 << 28) | (c->output->chroma_size / 2), c->regs + VE_EXTRA_OUT_FMT_OFFSET);
 	}
 
-	fill_frame_lists(c);
+	if (!fill_frame_lists(c))
+	{
+		ret = VDP_STATUS_ERROR;
+		goto err_ve_put;
+	}
 
 	unsigned int slice, pos = 0;
 	for (slice = 0; slice < info->slice_count; slice++)
@@ -820,9 +828,8 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 		if (h->nal_unit_type != 5 && h->nal_unit_type != 1)
 		{
-			free(c);
-			ve_put();
-			return VDP_STATUS_ERROR;
+			ret = VDP_STATUS_ERROR;
+			goto err_ve_put;
 		}
 
 		// Enable startcode detect and ??
@@ -939,11 +946,14 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		pos = (readl(c->regs + VE_H264_VLD_OFFSET) / 8) - 3;
 	}
 
+	ret = VDP_STATUS_OK;
+
+err_ve_put:
 	// stop H264 engine
 	ve_put();
-
+err_free:
 	free(c);
-	return VDP_STATUS_OK;
+	return ret;
 }
 
 VdpStatus new_decoder_h264(decoder_ctx_t *decoder)
