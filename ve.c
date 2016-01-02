@@ -132,7 +132,7 @@ int ve_open(void)
 
 	ve.version = readl(ve.regs + VE_VERSION) >> 16;
 
-	if (ve.version == 0x1680)
+	if (ve.version >= 0x1667)
 		ve.ioctl_offset = 1;
 
 	ioctl(ve.fd, IOCTL_ENABLE_VE + ve.ioctl_offset, 0);
