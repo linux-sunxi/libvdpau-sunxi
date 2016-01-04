@@ -32,8 +32,8 @@ struct sunxi_disp2_private
 	struct sunxi_disp pub;
 
 	int fd;
-
 	disp_layer_config video_config;
+	unsigned int screen_width;
 };
 
 static void sunxi_disp2_close(struct sunxi_disp *sunxi_disp);
@@ -63,6 +63,8 @@ struct sunxi_disp *sunxi_disp2_open(int osd_enabled)
 
 	if (ioctl(disp->fd, DISP_LAYER_SET_CONFIG, args))
 		goto err_video_layer;
+
+	disp->screen_width = ioctl(disp->fd, DISP_GET_SCN_WIDTH, args);
 
 	disp->pub.close = sunxi_disp2_close;
 	disp->pub.set_video_layer = sunxi_disp2_set_video_layer;
@@ -97,6 +99,39 @@ static int sunxi_disp2_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int
 {
 	struct sunxi_disp2_private *disp = (struct sunxi_disp2_private *)sunxi_disp;
 
+	disp_rect src = { .x = surface->video_src_rect.x0, .y = surface->video_src_rect.y0,
+			  .width = surface->video_src_rect.x1 - surface->video_src_rect.x0,
+			  .height = surface->video_src_rect.y1 - surface->video_src_rect.y0 };
+	disp_rect scn = { .x = x + surface->video_dst_rect.x0, .y = y + surface->video_dst_rect.y0,
+			  .width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0,
+			  .height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0 };
+
+	if (scn.y < 0)
+	{
+		int scn_clip = -scn.y;
+		int src_clip = scn_clip * src.height / scn.height;
+		scn.y = 0;
+		scn.height -= scn_clip;
+		src.y += src_clip;
+		src.height -= src_clip;
+	}
+	if (scn.x < 0)
+	{
+		int scn_clip = -scn.x;
+		int src_clip = scn_clip * src.width / scn.width;
+		scn.x = 0;
+		scn.width -= scn_clip;
+		src.x += src_clip;
+		src.width -= src_clip;
+	}
+	if (scn.x + scn.width > disp->screen_width)
+	{
+		int scn_clip = scn.x + scn.width - disp->screen_width;
+		int src_clip = scn_clip * src.width / scn.width;
+		scn.width -= scn_clip;
+		src.width -= src_clip;
+	}
+
 	unsigned long args[4] = { 0, (unsigned long)(&disp->video_config), 1, 0 };
 	switch (surface->vs->source_format)
 	{
@@ -129,14 +164,11 @@ static int sunxi_disp2_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int
 	disp->video_config.info.fb.size[2].width = surface->vs->width / 2;
 	disp->video_config.info.fb.size[2].height = surface->vs->height / 2;
 	disp->video_config.info.fb.align[2] = 16;
-	disp->video_config.info.fb.crop.x = (unsigned long long)(surface->video_src_rect.x0) << 32;
-	disp->video_config.info.fb.crop.y = (unsigned long long)(surface->video_src_rect.y0) << 32;
-	disp->video_config.info.fb.crop.width = (unsigned long long)(surface->video_src_rect.x1 - surface->video_src_rect.x0) << 32;
-	disp->video_config.info.fb.crop.height = (unsigned long long)(surface->video_src_rect.y1 - surface->video_src_rect.y0) << 32;
-	disp->video_config.info.screen_win.x = x + surface->video_dst_rect.x0;
-	disp->video_config.info.screen_win.y = y + surface->video_dst_rect.y0;
-	disp->video_config.info.screen_win.width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0;
-	disp->video_config.info.screen_win.height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0;
+	disp->video_config.info.fb.crop.x = (unsigned long long)(src.x) << 32;
+	disp->video_config.info.fb.crop.y = (unsigned long long)(src.y) << 32;
+	disp->video_config.info.fb.crop.width = (unsigned long long)(src.width) << 32;
+	disp->video_config.info.fb.crop.height = (unsigned long long)(src.height) << 32;
+	disp->video_config.info.screen_win = scn;
 	disp->video_config.enable = 1;
 
 	if (ioctl(disp->fd, DISP_LAYER_SET_CONFIG, args))

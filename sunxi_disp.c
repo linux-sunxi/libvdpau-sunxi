@@ -33,7 +33,6 @@ struct sunxi_disp_private
 	int fd;
 	int video_layer;
 	int osd_layer;
-
 	__disp_layer_info_t video_info;
 	__disp_layer_info_t osd_info;
 };
@@ -190,11 +189,12 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 
 	if (disp->video_info.scn_win.y < 0)
 	{
-		int cutoff = -(disp->video_info.scn_win.y);
-		disp->video_info.src_win.y += cutoff;
-		disp->video_info.src_win.height -= cutoff;
+		int scn_clip = -(disp->video_info.scn_win.y);
+		int src_clip = scn_clip * disp->video_info.src_win.height / disp->video_info.scn_win.height;
+		disp->video_info.src_win.y += src_clip;
+		disp->video_info.src_win.height -= src_clip;
 		disp->video_info.scn_win.y = 0;
-		disp->video_info.scn_win.height -= cutoff;
+		disp->video_info.scn_win.height -= scn_clip;
 	}
 
 	uint32_t args[4] = { 0, disp->video_layer, (unsigned long)(&disp->video_info), 0 };

@@ -32,10 +32,9 @@ struct sunxi_disp1_5_private
 	struct sunxi_disp pub;
 
 	int fd;
-
 	disp_layer_info video_info;
-
 	int layer_id;
+	unsigned int screen_width;
 };
 
 static void sunxi_disp1_5_close(struct sunxi_disp *sunxi_disp);
@@ -71,6 +70,8 @@ struct sunxi_disp *sunxi_disp1_5_open(int osd_enabled)
 	if (ioctl(disp->fd, DISP_CMD_LAYER_SET_INFO, args))
 		goto err_video_layer;
 
+	disp->screen_width = ioctl(disp->fd, DISP_CMD_GET_SCN_WIDTH, args);
+
 	disp->pub.close = sunxi_disp1_5_close;
 	disp->pub.set_video_layer = sunxi_disp1_5_set_video_layer;
 	disp->pub.close_video_layer = sunxi_disp1_5_close_video_layer;
@@ -102,6 +103,39 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 {
 	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
 
+	disp_window src = { .x = surface->video_src_rect.x0, .y = surface->video_src_rect.y0,
+			    .width = surface->video_src_rect.x1 - surface->video_src_rect.x0,
+			    .height = surface->video_src_rect.y1 - surface->video_src_rect.y0 };
+	disp_window scn = { .x = x + surface->video_dst_rect.x0, .y = y + surface->video_dst_rect.y0,
+			    .width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0,
+			    .height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0 };
+
+	if (scn.y < 0)
+	{
+		int scn_clip = -scn.y;
+		int src_clip = scn_clip * src.height / scn.height;
+		scn.y = 0;
+		scn.height -= scn_clip;
+		src.y += src_clip;
+		src.height -= src_clip;
+	}
+	if (scn.x < 0)
+	{
+		int scn_clip = -scn.x;
+		int src_clip = scn_clip * src.width / scn.width;
+		scn.x = 0;
+		scn.width -= scn_clip;
+		src.x += src_clip;
+		src.width -= src_clip;
+	}
+	if (scn.x + scn.width > disp->screen_width)
+	{
+		int scn_clip = scn.x + scn.width - disp->screen_width;
+		int src_clip = scn_clip * src.width / scn.width;
+		scn.width -= scn_clip;
+		src.width -= src_clip;
+	}
+
 	unsigned long args[3] = { 0, disp->layer_id, (unsigned long)(&disp->video_info) };
 	switch (surface->vs->source_format)
 	{
@@ -129,14 +163,8 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 
 	disp->video_info.fb.size.width = surface->vs->width;
 	disp->video_info.fb.size.height = surface->vs->height;
-	disp->video_info.fb.src_win.x = surface->video_src_rect.x0;
-	disp->video_info.fb.src_win.y = surface->video_src_rect.y0;
-	disp->video_info.fb.src_win.width = surface->video_src_rect.x1 - surface->video_src_rect.x0;
-	disp->video_info.fb.src_win.height = surface->video_src_rect.y1 - surface->video_src_rect.y0;
-	disp->video_info.screen_win.x = x + surface->video_dst_rect.x0;
-	disp->video_info.screen_win.y = y + surface->video_dst_rect.y0;
-	disp->video_info.screen_win.width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0;
-	disp->video_info.screen_win.height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0;
+	disp->video_info.fb.src_win = src;
+	disp->video_info.screen_win = scn;
 	disp->video_info.fb.pre_multiply = 1;
 
 	if (ioctl(disp->fd, DISP_CMD_LAYER_ENABLE, args))
