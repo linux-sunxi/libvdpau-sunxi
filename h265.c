@@ -20,8 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <cedrus/cedrus.h>
+#include <cedrus/cedrus_regs.h>
 #include "vdpau_private.h"
-#include "ve.h"
 
 static int find_startcode(const uint8_t *data, int len, int start)
 {
@@ -158,21 +159,21 @@ struct h265_private
 	video_surface_ctx_t *output;
 	uint8_t nal_unit_type;
 
-	struct ve_mem *neighbor_info;
-	struct ve_mem *entry_points;
+	cedrus_mem_t *neighbor_info;
+	cedrus_mem_t *entry_points;
 
 	struct h265_slice_header slice;
 };
 
 struct h265_video_private
 {
-	struct ve_mem *extra_data;
+	cedrus_mem_t *extra_data;
 };
 
 static void h265_video_private_free(video_surface_ctx_t *surface)
 {
 	struct h265_video_private *vp = surface->decoder_private;
-	ve_free(vp->extra_data);
+	cedrus_mem_free(vp->extra_data);
 	free(vp);
 }
 
@@ -186,7 +187,7 @@ static struct h265_video_private *get_surface_priv(struct h265_private *p, video
 		if (!vp)
 			return NULL;
 
-		vp->extra_data = ve_malloc(PicSizeInCtbsY * 160);
+		vp->extra_data = cedrus_mem_alloc(surface->device->cedrus, PicSizeInCtbsY * 160);
 		if (!vp->extra_data)
 		{
 			free(vp);
@@ -435,10 +436,10 @@ static void write_pic_list(struct h265_private *p)
 			writel(VE_SRAM_HEVC_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
 			writel(p->info->PicOrderCntVal[i], p->regs + VE_HEVC_SRAM_DATA);
 			writel(p->info->PicOrderCntVal[i], p->regs + VE_HEVC_SRAM_DATA);
-			writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-			writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-			writel(v->yuv->data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-			writel((v->yuv->data->phys + v->luma_size) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+			writel(cedrus_mem_get_bus_addr(vp->extra_data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+			writel(cedrus_mem_get_bus_addr(vp->extra_data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+			writel(cedrus_mem_get_bus_addr(v->yuv->data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+			writel((cedrus_mem_get_bus_addr(v->yuv->data) + v->luma_size) >> 8, p->regs + VE_HEVC_SRAM_DATA);
 		}
 	}
 
@@ -447,10 +448,10 @@ static void write_pic_list(struct h265_private *p)
 	writel(VE_SRAM_HEVC_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);
 	writel(p->info->CurrPicOrderCntVal, p->regs + VE_HEVC_SRAM_DATA);
 	writel(p->info->CurrPicOrderCntVal, p->regs + VE_HEVC_SRAM_DATA);
-	writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-	writel(vp->extra_data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-	writel(p->output->yuv->data->phys >> 8, p->regs + VE_HEVC_SRAM_DATA);
-	writel((p->output->yuv->data->phys + p->output->luma_size) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+	writel(cedrus_mem_get_bus_addr(vp->extra_data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+	writel(cedrus_mem_get_bus_addr(vp->extra_data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+	writel(cedrus_mem_get_bus_addr(p->output->yuv->data) >> 8, p->regs + VE_HEVC_SRAM_DATA);
+	writel((cedrus_mem_get_bus_addr(p->output->yuv->data) + p->output->luma_size) >> 8, p->regs + VE_HEVC_SRAM_DATA);
 
 	writel(i, p->regs + VE_HEVC_REC_BUF_IDX);
 }
@@ -549,7 +550,7 @@ static void write_entry_point_list(struct h265_private *p)
 	writel((y << 16) | (x << 0), p->regs + VE_HEVC_TILE_START_CTB);
 	writel(((y + p->info->row_height_minus1[ty]) << 16) | ((x + p->info->column_width_minus1[tx]) << 0), p->regs + VE_HEVC_TILE_END_CTB);
 
-	uint32_t *entry_points = p->entry_points->virt;
+	uint32_t *entry_points = cedrus_mem_get_pointer(p->entry_points);
 	for (i = 0; i < p->slice.num_entry_point_offsets; i++)
 	{
 		if (tx + 1 >= p->info->num_tile_columns_minus1 + 1)
@@ -568,8 +569,8 @@ static void write_entry_point_list(struct h265_private *p)
 		entry_points[i * 4 + 3] = ((y + p->info->row_height_minus1[ty]) << 16) | ((x + p->info->column_width_minus1[tx]) << 0);
 	}
 
-	ve_flush_cache(p->entry_points);
-	writel(p->entry_points->phys >> 8, p->regs + VE_HEVC_TILE_LIST_ADDR);
+	cedrus_mem_flush_cache(p->entry_points);
+	writel(cedrus_mem_get_bus_addr(p->entry_points) >> 8, p->regs + VE_HEVC_TILE_LIST_ADDR);
 }
 
 static void write_weighted_pred(struct h265_private *p)
@@ -724,15 +725,15 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	p->regs = ve_get(VE_ENGINE_HEVC, 0x0);
+	p->regs = cedrus_ve_get(decoder->device->cedrus, CEDRUS_ENGINE_HEVC, 0x0);
 
 	int pos = 0;
-	while ((pos = find_startcode(decoder->data->virt, len, pos)) != -1)
+	while ((pos = find_startcode(cedrus_mem_get_pointer(decoder->data), len, pos)) != -1)
 	{
-		writel((decoder->data->phys + VBV_SIZE - 1) >> 8, p->regs + VE_HEVC_BITS_END_ADDR);
+		writel((cedrus_mem_get_bus_addr(decoder->data) + VBV_SIZE - 1) >> 8, p->regs + VE_HEVC_BITS_END_ADDR);
 		writel((len - pos) * 8, p->regs + VE_HEVC_BITS_LEN);
 		writel(pos * 8, p->regs + VE_HEVC_BITS_OFFSET);
-		writel((decoder->data->phys >> 8) | (0x7 << 28), p->regs + VE_HEVC_BITS_ADDR);
+		writel((cedrus_mem_get_bus_addr(decoder->data) >> 8) | (0x7 << 28), p->regs + VE_HEVC_BITS_ADDR);
 
 		writel(0x7, p->regs + VE_HEVC_TRIG);
 
@@ -825,7 +826,7 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 		write_entry_point_list(p);
 
 		writel(0x0, p->regs + 0x580);
-		writel(p->neighbor_info->phys >> 8, p->regs + VE_HEVC_NEIGHBOR_INFO_ADDR);
+		writel(cedrus_mem_get_bus_addr(p->neighbor_info) >> 8, p->regs + VE_HEVC_NEIGHBOR_INFO_ADDR);
 
 		write_pic_list(p);
 
@@ -833,12 +834,12 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 		write_weighted_pred(p);
 
 		writel(0x8, p->regs + VE_HEVC_TRIG);
-		ve_wait(1);
+		cedrus_ve_wait(decoder->device->cedrus, 1);
 
 		writel(readl(p->regs + VE_HEVC_STATUS) & 0x7, p->regs + VE_HEVC_STATUS);
 	}
 
-	ve_put();
+	cedrus_ve_put(decoder->device->cedrus);
 
 	return VDP_STATUS_OK;
 }
@@ -847,8 +848,8 @@ static void h265_private_free(decoder_ctx_t *decoder)
 {
 	struct h265_private *p = decoder->private;
 
-	ve_free(p->neighbor_info);
-	ve_free(p->entry_points);
+	cedrus_mem_free(p->neighbor_info);
+	cedrus_mem_free(p->entry_points);
 
 	free(p);
 }
@@ -859,8 +860,8 @@ VdpStatus new_decoder_h265(decoder_ctx_t *decoder)
 	if (!p)
 		return VDP_STATUS_RESOURCES;
 
-	p->neighbor_info = ve_malloc(397 * 1024);
-	p->entry_points = ve_malloc(4 * 1024);
+	p->neighbor_info = cedrus_mem_alloc(decoder->device->cedrus, 397 * 1024);
+	p->entry_points = cedrus_mem_alloc(decoder->device->cedrus, 4 * 1024);
 
 	decoder->decode = h265_decode;
 	decoder->private = p;

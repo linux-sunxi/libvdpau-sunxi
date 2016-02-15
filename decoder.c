@@ -18,8 +18,8 @@
  */
 
 #include <string.h>
+#include <cedrus/cedrus.h>
 #include "vdpau_private.h"
-#include "ve.h"
 
 VdpStatus vdp_decoder_create(VdpDevice device,
                              VdpDecoderProfile profile,
@@ -44,7 +44,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 	dec->width = width;
 	dec->height = height;
 
-	dec->data = ve_malloc(VBV_SIZE);
+	dec->data = cedrus_mem_alloc(dec->device->cedrus, VBV_SIZE);
 	if (!(dec->data))
 		goto err_data;
 
@@ -71,7 +71,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 		break;
 
 	case VDP_DECODER_PROFILE_HEVC_MAIN:
-		if (ve_get_version() == 0x1680)
+		if (cedrus_get_ve_version(dec->device->cedrus) == 0x1680)
 			ret = new_decoder_h265(dec);
 		else
 			ret = VDP_STATUS_INVALID_DECODER_PROFILE;
@@ -88,7 +88,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 	return VDP_STATUS_OK;
 
 err_decoder:
-	ve_free(dec->data);
+	cedrus_mem_free(dec->data);
 err_data:
 	handle_destroy(*decoder);
 err_ctx:
@@ -104,7 +104,7 @@ VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
 	if (dec->private_free)
 		dec->private_free(dec);
 
-	ve_free(dec->data);
+	cedrus_mem_free(dec->data);
 
 	handle_destroy(decoder);
 
@@ -151,10 +151,10 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 
 	for (i = 0; i < bitstream_buffer_count; i++)
 	{
-		memcpy(dec->data->virt + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
+		memcpy(cedrus_mem_get_pointer(dec->data) + pos, bitstream_buffers[i].bitstream, bitstream_buffers[i].bitstream_bytes);
 		pos += bitstream_buffers[i].bitstream_bytes;
 	}
-	ve_flush_cache(dec->data);
+	cedrus_mem_flush_cache(dec->data);
 
 	return dec->decode(dec, picture_info, pos, vid);
 }
@@ -204,7 +204,7 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 		break;
 	case VDP_DECODER_PROFILE_HEVC_MAIN:
 		*max_level = VDP_DECODER_LEVEL_HEVC_5;
-		if (ve_get_version() == 0x1680)
+		if (cedrus_get_ve_version(dev->cedrus) == 0x1680)
 			*is_supported = VDP_TRUE;
 		else
 			*is_supported = VDP_FALSE;

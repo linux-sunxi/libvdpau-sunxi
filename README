@@ -7,6 +7,7 @@ H.264 and on the H3 SoC it also decodes H.265.
 Requirements:
 
    libvdpau >= 1.1
+   libcedrus (https://github.com/linux-sunxi/libcedrus)
 
 
 Installation:

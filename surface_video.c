@@ -18,8 +18,8 @@
  */
 
 #include <string.h>
+#include <cedrus/cedrus.h>
 #include "vdpau_private.h"
-#include "ve.h"
 #include "tiled_yuv.h"
 
 void yuv_unref(yuv_data_t *yuv)
@@ -28,7 +28,7 @@ void yuv_unref(yuv_data_t *yuv)
 
 	if (yuv->ref_count == 0)
 	{
-		ve_free(yuv->data);
+		cedrus_mem_free(yuv->data);
 		free(yuv);
 	}
 }
@@ -46,7 +46,7 @@ static VdpStatus yuv_new(video_surface_ctx_t *video_surface)
 		return VDP_STATUS_RESOURCES;
 
 	video_surface->yuv->ref_count = 1;
-	video_surface->yuv->data = ve_malloc(video_surface->luma_size + video_surface->chroma_size);
+	video_surface->yuv->data = cedrus_mem_alloc(video_surface->device->cedrus, video_surface->luma_size + video_surface->chroma_size);
 
 	if (!(video_surface->yuv->data))
 	{
@@ -70,11 +70,11 @@ VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
 
 VdpStatus rec_prepare(video_surface_ctx_t *video_surface)
 {
-	if (ve_get_version() == 0x1680)
+	if (cedrus_get_ve_version(video_surface->device->cedrus) == 0x1680)
 	{
 		if (!video_surface->rec)
 		{
-			video_surface->rec = ve_malloc(video_surface->luma_size + video_surface->chroma_size);
+			video_surface->rec = cedrus_mem_alloc(video_surface->device->cedrus, video_surface->luma_size + video_surface->chroma_size);
 			if (!video_surface->rec)
 				return VDP_STATUS_RESOURCES;
 		}
@@ -147,7 +147,7 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 		vs->decoder_private_free(vs);
 
 	if (vs->rec && vs->rec != vs->yuv->data)
-		ve_free(vs->rec);
+		cedrus_mem_free(vs->rec);
 
 	yuv_unref(vs->yuv);
 
@@ -195,15 +195,15 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	switch (destination_ycbcr_format)
 	{
 	case VDP_YCBCR_FORMAT_NV12:
-		tiled_to_planar(vs->yuv->data->virt, destination_data[0], destination_pitches[0], vs->width, vs->height);
-		tiled_to_planar(vs->yuv->data->virt + vs->luma_size, destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
+		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data), destination_data[0], destination_pitches[0], vs->width, vs->height);
+		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size, destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
 
 	case VDP_YCBCR_FORMAT_YV12:
 		if (destination_pitches[2] != destination_pitches[1])
 			return VDP_STATUS_ERROR;
-		tiled_to_planar(vs->yuv->data->virt, destination_data[0], destination_pitches[0], vs->width, vs->height);
-		tiled_deinterleave_to_planar(vs->yuv->data->virt + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
+		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data), destination_data[0], destination_pitches[0], vs->width, vs->height);
+		tiled_deinterleave_to_planar(cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
 	}
 
@@ -235,7 +235,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_422)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data->virt;
+		dst = cedrus_mem_get_pointer(vs->yuv->data);
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, 2*vs->width);
 			src += source_pitches[0];
@@ -251,14 +251,14 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data->virt;
+		dst = cedrus_mem_get_pointer(vs->yuv->data);
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data->virt + vs->luma_size;
+		dst = cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[1];
@@ -270,21 +270,21 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		if (vs->chroma_type != VDP_CHROMA_TYPE_420)
 			return VDP_STATUS_INVALID_CHROMA_TYPE;
 		src = source_data[0];
-		dst = vs->yuv->data->virt;
+		dst = cedrus_mem_get_pointer(vs->yuv->data);
 		for (i = 0; i < vs->height; i++) {
 			memcpy(dst, src, vs->width);
 			src += source_pitches[0];
 			dst += vs->width;
 		}
 		src = source_data[2];
-		dst = vs->yuv->data->virt + vs->luma_size;
+		dst = cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[1];
 			dst += vs->width / 2;
 		}
 		src = source_data[1];
-		dst = vs->yuv->data->virt + vs->luma_size + vs->chroma_size / 2;
+		dst = cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size + vs->chroma_size / 2;
 		for (i = 0; i < vs->height / 2; i++) {
 			memcpy(dst, src, vs->width / 2);
 			src += source_pitches[2];
@@ -293,7 +293,7 @@ VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,
 		break;
 	}
 
-	ve_flush_cache(vs->yuv->data);
+	cedrus_mem_flush_cache(vs->yuv->data);
 
 	return VDP_STATUS_OK;
 }

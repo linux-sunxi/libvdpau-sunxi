@@ -25,16 +25,17 @@
 #define VBV_SIZE (1 * 1024 * 1024)
 
 #include <stdlib.h>
+#include <cedrus/cedrus.h>
 #include <vdpau/vdpau.h>
 #include <vdpau/vdpau_x11.h>
 #include <X11/Xlib.h>
-#include "ve.h"
 #include "sunxi_disp.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
 typedef struct
 {
+	cedrus_t *cedrus;
 	Display *display;
 	int screen;
 	VdpPreemptionCallback *preemption_callback;
@@ -47,7 +48,7 @@ typedef struct
 typedef struct
 {
 	int ref_count;
-	struct ve_mem *data;
+	cedrus_mem_t *data;
 } yuv_data_t;
 
 typedef struct video_surface_ctx_struct
@@ -58,7 +59,7 @@ typedef struct video_surface_ctx_struct
 	VdpYCbCrFormat source_format;
 	yuv_data_t *yuv;
 	int luma_size, chroma_size;
-	struct ve_mem *rec;
+	cedrus_mem_t *rec;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
 } video_surface_ctx_t;
@@ -67,7 +68,7 @@ typedef struct decoder_ctx_struct
 {
 	uint32_t width, height;
 	VdpDecoderProfile profile;
-	struct ve_mem *data;
+	cedrus_mem_t *data;
 	device_ctx_t *device;
 	VdpStatus (*decode)(struct decoder_ctx_struct *decoder, VdpPictureInfo const *info, const int len, video_surface_ctx_t *output);
 	void *private;
@@ -106,7 +107,7 @@ typedef struct
 	device_ctx_t *device;
 	VdpRGBAFormat format;
 	uint32_t width, height;
-	struct ve_mem *data;
+	cedrus_mem_t *data;
 	VdpRect dirty;
 	uint32_t flags;
 } rgba_surface_t;

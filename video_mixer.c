@@ -18,8 +18,8 @@
  */
 
 #include <math.h>
+#include <cedrus/cedrus.h>
 #include "vdpau_private.h"
-#include "ve.h"
 #include "rgba.h"
 
 VdpStatus vdp_video_mixer_create(VdpDevice device,

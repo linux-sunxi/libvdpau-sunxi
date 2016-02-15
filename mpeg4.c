@@ -20,8 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <cedrus/cedrus.h>
+#include <cedrus/cedrus_regs.h>
 #include "vdpau_private.h"
-#include "ve.h"
 
 typedef struct
 {
@@ -75,17 +76,17 @@ static uint32_t get_bits(bitstream *bs, int n)
 
 typedef struct
 {
-	struct ve_mem *mbh_buffer;
-	struct ve_mem *dcac_buffer;
-	struct ve_mem *ncf_buffer;
+	cedrus_mem_t *mbh_buffer;
+	cedrus_mem_t *dcac_buffer;
+	cedrus_mem_t *ncf_buffer;
 } mpeg4_private_t;
 
 static void mpeg4_private_free(decoder_ctx_t *decoder)
 {
 	mpeg4_private_t *decoder_p = (mpeg4_private_t *)decoder->private;
-	ve_free(decoder_p->mbh_buffer);
-	ve_free(decoder_p->dcac_buffer);
-	ve_free(decoder_p->ncf_buffer);
+	cedrus_mem_free(decoder_p->mbh_buffer);
+	cedrus_mem_free(decoder_p->dcac_buffer);
+	cedrus_mem_free(decoder_p->ncf_buffer);
 	free(decoder_p);
 }
 
@@ -163,7 +164,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	bitstream bs = { .data = decoder->data->virt, .length = len, .bitpos = 0 };
+	bitstream bs = { .data = cedrus_mem_get_pointer(decoder->data), .length = len, .bitpos = 0 };
 
 	while (find_startcode(&bs))
 	{
@@ -175,22 +176,22 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 			continue;
 
 		// activate MPEG engine
-		void *ve_regs = ve_get(VE_ENGINE_MPEG, 0);
+		void *ve_regs = cedrus_ve_get(decoder->device->cedrus, CEDRUS_ENGINE_MPEG, 0);
 
 		// set buffers
-		writel(decoder_p->mbh_buffer->phys, ve_regs + VE_MPEG_MBH_ADDR);
-		writel(decoder_p->dcac_buffer->phys, ve_regs + VE_MPEG_DCAC_ADDR);
-		writel(decoder_p->ncf_buffer->phys, ve_regs + VE_MPEG_NCF_ADDR);
+		writel(cedrus_mem_get_bus_addr(decoder_p->mbh_buffer), ve_regs + VE_MPEG_MBH_ADDR);
+		writel(cedrus_mem_get_bus_addr(decoder_p->dcac_buffer), ve_regs + VE_MPEG_DCAC_ADDR);
+		writel(cedrus_mem_get_bus_addr(decoder_p->ncf_buffer), ve_regs + VE_MPEG_NCF_ADDR);
 
 		// set output buffers
-		writel(output->rec->phys, ve_regs + VE_MPEG_REC_LUMA);
-		writel(output->rec->phys + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
-		writel(output->yuv->data->phys, ve_regs + VE_MPEG_ROT_LUMA);
-		writel(output->yuv->data->phys + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
+		writel(cedrus_mem_get_bus_addr(output->rec), ve_regs + VE_MPEG_REC_LUMA);
+		writel(cedrus_mem_get_bus_addr(output->rec) + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
+		writel(cedrus_mem_get_bus_addr(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
+		writel(cedrus_mem_get_bus_addr(output->yuv->data) + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
-		if (ve_get_version() == 0x1680)
+		if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1680)
 			writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
 
 		// set vop header
@@ -217,7 +218,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(0x0, ve_regs + VE_MPEG_MBA);
 
 		// enable interrupt, unknown control flags
-		writel(0x80084118 | ((ve_get_version() != 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
+		writel(0x80084118 | ((cedrus_get_ve_version(decoder->device->cedrus) != 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
 
 		// set quantization parameter
 		writel(hdr.vop_quant, ve_regs + VE_MPEG_QP_INPUT);
@@ -226,14 +227,14 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *forward = handle_get(info->forward_reference);
-			writel(forward->rec->phys, ve_regs + VE_MPEG_FWD_LUMA);
-			writel(forward->rec->phys + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
+			writel(cedrus_mem_get_bus_addr(forward->rec), ve_regs + VE_MPEG_FWD_LUMA);
+			writel(cedrus_mem_get_bus_addr(forward->rec) + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *backward = handle_get(info->backward_reference);
-			writel(backward->rec->phys, ve_regs + VE_MPEG_BACK_LUMA);
-			writel(backward->rec->phys + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
+			writel(cedrus_mem_get_bus_addr(backward->rec), ve_regs + VE_MPEG_BACK_LUMA);
+			writel(cedrus_mem_get_bus_addr(backward->rec) + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
 		// set trb/trd
@@ -254,7 +255,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(len * 8 - bs.bitpos, ve_regs + VE_MPEG_VLD_LEN);
 
 		// input end
-		uint32_t input_addr = decoder->data->phys;
+		uint32_t input_addr = cedrus_mem_get_bus_addr(decoder->data);
 		writel(input_addr + VBV_SIZE - 1, ve_regs + VE_MPEG_VLD_END);
 
 		// set input buffer
@@ -263,13 +264,13 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		// trigger
 		writel(0x8400000d | ((width * height) << 8), ve_regs + VE_MPEG_TRIGGER);
 
-		ve_wait(1);
+		cedrus_ve_wait(decoder->device->cedrus, 1);
 
 		// clear status
 		writel(readl(ve_regs + VE_MPEG_STATUS) | 0xf, ve_regs + VE_MPEG_STATUS);
 
 		// stop MPEG engine
-		ve_put();
+		cedrus_ve_put(decoder->device->cedrus);
 	}
 
 	return VDP_STATUS_OK;
@@ -284,15 +285,15 @@ VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder)
 	int width = ((decoder->width + 15) / 16);
 	int height = ((decoder->height + 15) / 16);
 
-	decoder_p->mbh_buffer = ve_malloc(height * 2048);
+	decoder_p->mbh_buffer = cedrus_mem_alloc(decoder->device->cedrus, height * 2048);
 	if (!decoder_p->mbh_buffer)
 		goto err_mbh;
 
-	decoder_p->dcac_buffer = ve_malloc(width * height * 2);
+	decoder_p->dcac_buffer = cedrus_mem_alloc(decoder->device->cedrus, width * height * 2);
 	if (!decoder_p->dcac_buffer)
 		goto err_dcac;
 
-	decoder_p->ncf_buffer = ve_malloc(4 * 1024);
+	decoder_p->ncf_buffer = cedrus_mem_alloc(decoder->device->cedrus, 4 * 1024);
 	if (!decoder_p->ncf_buffer)
 		goto err_ncf;
 
@@ -303,9 +304,9 @@ VdpStatus new_decoder_mpeg4(decoder_ctx_t *decoder)
 	return VDP_STATUS_OK;
 
 err_ncf:
-	ve_free(decoder_p->dcac_buffer);
+	cedrus_mem_free(decoder_p->dcac_buffer);
 err_dcac:
-	ve_free(decoder_p->mbh_buffer);
+	cedrus_mem_free(decoder_p->mbh_buffer);
 err_mbh:
 	free(decoder_p);
 err_priv:

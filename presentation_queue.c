@@ -22,8 +22,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <cedrus/cedrus.h>
 #include <sys/ioctl.h>
-#include "ve.h"
 #include "rgba.h"
 #include "sunxi_disp.h"
 

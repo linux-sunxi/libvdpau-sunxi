@@ -20,8 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <cedrus/cedrus.h>
+#include <cedrus/cedrus_regs.h>
 #include "vdpau_private.h"
-#include "ve.h"
 
 static int find_startcode(const uint8_t *data, int len, int start)
 {
@@ -144,13 +145,13 @@ typedef struct
 
 typedef struct
 {
-	struct ve_mem *extra_data;
+	cedrus_mem_t *extra_data;
 } h264_private_t;
 
 static void h264_private_free(decoder_ctx_t *decoder)
 {
 	h264_private_t *decoder_p = (h264_private_t *)decoder->private;
-	ve_free(decoder_p->extra_data);
+	cedrus_mem_free(decoder_p->extra_data);
 	free(decoder_p);
 }
 
@@ -160,7 +161,7 @@ static void h264_private_free(decoder_ctx_t *decoder)
 
 typedef struct
 {
-	struct ve_mem *extra_data;
+	cedrus_mem_t *extra_data;
 	uint8_t pos;
 	uint8_t pic_type;
 } h264_video_private_t;
@@ -168,7 +169,7 @@ typedef struct
 static void h264_video_private_free(video_surface_ctx_t *surface)
 {
 	h264_video_private_t *surface_p = (h264_video_private_t *)surface->decoder_private;
-	ve_free(surface_p->extra_data);
+	cedrus_mem_free(surface_p->extra_data);
 	free(surface_p);
 }
 
@@ -182,7 +183,7 @@ static h264_video_private_t *get_surface_priv(h264_context_t *c, video_surface_c
 		if (!surface_p)
 			return NULL;
 
-		surface_p->extra_data = ve_malloc(c->video_extra_data_len * 2);
+		surface_p->extra_data = cedrus_mem_alloc(surface->device->cedrus, c->video_extra_data_len * 2);
 		if (!surface_p->extra_data)
 		{
 			free(surface_p);
@@ -674,10 +675,10 @@ static int fill_frame_lists(h264_context_t *c)
 			writel((uint16_t)c->info->field_order_cnt[0], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel((uint16_t)c->info->field_order_cnt[1], c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(output_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->output->rec->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(c->output->rec->phys + c->output->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(output_p->extra_data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(output_p->extra_data->phys + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(c->output->rec), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(c->output->rec) + c->output->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(output_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(output_p->extra_data) + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 
 			output_p->pos = i;
@@ -697,10 +698,10 @@ static int fill_frame_lists(h264_context_t *c)
 			writel(frame_list[i]->top_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(frame_list[i]->bottom_pic_order_cnt, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(surface_p->pic_type << 8, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface->rec->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface->rec->phys + surface->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface_p->extra_data->phys, c->regs + VE_H264_RAM_WRITE_DATA);
-			writel(surface_p->extra_data->phys + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(surface->rec), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(surface->rec) + surface->luma_size, c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(surface_p->extra_data), c->regs + VE_H264_RAM_WRITE_DATA);
+			writel(cedrus_mem_get_bus_addr(surface_p->extra_data) + c->video_extra_data_len, c->regs + VE_H264_RAM_WRITE_DATA);
 			writel(0, c->regs + VE_H264_RAM_WRITE_DATA);
 		}
 	}
@@ -770,13 +771,13 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		output_p->pic_type = PIC_TYPE_FRAME;
 
 	// activate H264 engine
-	c->regs = ve_get(VE_ENGINE_H264, (decoder->width >= 2048 ? 0x1 : 0x0) << 21);
+	c->regs = cedrus_ve_get(decoder->device->cedrus, CEDRUS_ENGINE_H264, (decoder->width >= 2048 ? 0x1 : 0x0) << 21);
 
 	// some buffers
-	uint32_t extra_buffers = decoder_p->extra_data->phys;
+	uint32_t extra_buffers = cedrus_mem_get_bus_addr(decoder_p->extra_data);
 	writel(extra_buffers, c->regs + VE_H264_EXTRA_BUFFER1);
 	writel(extra_buffers + 0x48000, c->regs + VE_H264_EXTRA_BUFFER2);
-	if (ve_get_version() == 0x1625 || decoder->width >= 2048)
+	if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1625 || decoder->width >= 2048)
 	{
 		int size = (c->picture_width_in_mbs_minus1 + 32) * 192;
 		size = (size + 4095) & ~4095;
@@ -803,10 +804,10 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 	// sdctrl
 	writel(0x00000000, c->regs + VE_H264_SDROT_CTRL);
-	if (ve_get_version() == 0x1680)
+	if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1680)
 	{
-		writel(c->output->yuv->data->phys, c->regs + VE_H264_SDROT_LUMA);
-		writel(c->output->yuv->data->phys + c->output->luma_size, c->regs + VE_H264_SDROT_CHROMA);
+		writel(cedrus_mem_get_bus_addr(c->output->yuv->data), c->regs + VE_H264_SDROT_LUMA);
+		writel(cedrus_mem_get_bus_addr(c->output->yuv->data) + c->output->luma_size, c->regs + VE_H264_SDROT_CHROMA);
 		writel((0x2 << 30) | (0x1 << 28) | (c->output->chroma_size / 2), c->regs + VE_EXTRA_OUT_FMT_OFFSET);
 	}
 
@@ -822,9 +823,9 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		h264_header_t *h = &c->header;
 		memset(h, 0, sizeof(h264_header_t));
 
-		pos = find_startcode(decoder->data->virt, len, pos) + 3;
+		pos = find_startcode(cedrus_mem_get_pointer(decoder->data), len, pos) + 3;
 
-		h->nal_unit_type = ((uint8_t *)(decoder->data->virt))[pos++] & 0x1f;
+		h->nal_unit_type = ((uint8_t *)cedrus_mem_get_pointer(decoder->data))[pos++] & 0x1f;
 
 		if (h->nal_unit_type != 5 && h->nal_unit_type != 1)
 		{
@@ -833,12 +834,12 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		}
 
 		// Enable startcode detect and ??
-		writel((0x1 << 25) | (0x1 << 10) | ((ve_get_version() == 0x1680) << 9), c->regs + VE_H264_CTRL);
+		writel((0x1 << 25) | (0x1 << 10) | ((cedrus_get_ve_version(decoder->device->cedrus) == 0x1680) << 9), c->regs + VE_H264_CTRL);
 
 		// input buffer
 		writel((len - pos) * 8, c->regs + VE_H264_VLD_LEN);
 		writel(pos * 8, c->regs + VE_H264_VLD_OFFSET);
-		uint32_t input_addr = decoder->data->phys;
+		uint32_t input_addr = cedrus_mem_get_bus_addr(decoder->data);
 		writel(input_addr + VBV_SIZE - 1, c->regs + VE_H264_VLD_END);
 		writel((input_addr & 0x0ffffff0) | (input_addr >> 28) | (0x7 << 28), c->regs + VE_H264_VLD_ADDR);
 
@@ -938,7 +939,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		// SHOWTIME
 		writel(0x8, c->regs + VE_H264_TRIGGER);
 
-		ve_wait(1);
+		cedrus_ve_wait(decoder->device->cedrus, 1);
 
 		// clear status flags
 		writel(readl(c->regs + VE_H264_STATUS), c->regs + VE_H264_STATUS);
@@ -950,7 +951,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 err_ve_put:
 	// stop H264 engine
-	ve_put();
+	cedrus_ve_put(decoder->device->cedrus);
 err_free:
 	free(c);
 	return ret;
@@ -963,7 +964,7 @@ VdpStatus new_decoder_h264(decoder_ctx_t *decoder)
 		return VDP_STATUS_RESOURCES;
 
 	int extra_data_size = 320 * 1024;
-	if (ve_get_version() == 0x1625 || decoder->width >= 2048)
+	if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1625 || decoder->width >= 2048)
 	{
 		// Engine version 0x1625 needs two extra buffers
 		extra_data_size += ((decoder->width - 1) / 16 + 32) * 192;
@@ -971,7 +972,7 @@ VdpStatus new_decoder_h264(decoder_ctx_t *decoder)
 		extra_data_size += ((decoder->width - 1) / 16 + 64) * 80;
 	}
 
-	decoder_p->extra_data = ve_malloc(extra_data_size);
+	decoder_p->extra_data = cedrus_mem_alloc(decoder->device->cedrus, extra_data_size);
 	if (!decoder_p->extra_data)
 	{
 		free(decoder_p);

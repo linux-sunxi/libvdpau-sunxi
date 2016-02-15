@@ -157,9 +157,9 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 		break;
 	}
 
-	disp->video_info.fb.addr[0] = surface->yuv->data->phys + 0x40000000;
-	disp->video_info.fb.addr[1] = surface->yuv->data->phys + surface->vs->luma_size + 0x40000000;
-	disp->video_info.fb.addr[2] = surface->yuv->data->phys + surface->vs->luma_size + surface->vs->chroma_size / 2 + 0x40000000;
+	disp->video_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
+	disp->video_info.fb.addr[1] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size;
+	disp->video_info.fb.addr[2] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size + surface->vs->chroma_size / 2;
 
 	disp->video_info.fb.size.width = surface->vs->width;
 	disp->video_info.fb.size.height = surface->vs->height;

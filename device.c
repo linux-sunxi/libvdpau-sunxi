@@ -20,8 +20,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <cedrus/cedrus.h>
 #include "vdpau_private.h"
-#include "ve.h"
 
 VdpStatus vdp_imp_device_create_x11(Display *display,
                                     int screen,
@@ -38,12 +38,15 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	dev->display = XOpenDisplay(XDisplayString(display));
 	dev->screen = screen;
 
-	if (!ve_open())
+	dev->cedrus = cedrus_open();
+	if (!dev->cedrus)
 	{
 		XCloseDisplay(dev->display);
 		handle_destroy(*device);
 		return VDP_STATUS_ERROR;
 	}
+
+	VDPAU_DBG("VE version 0x%04x opened", cedrus_get_ve_version(dev->cedrus));
 
 	char *env_vdpau_osd = getenv("VDPAU_OSD");
 	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
@@ -68,7 +71,7 @@ VdpStatus vdp_device_destroy(VdpDevice device)
 
 	if (dev->osd_enabled)
 		close(dev->g2d_fd);
-	ve_close();
+	cedrus_close(dev->cedrus);
 	XCloseDisplay(dev->display);
 
 	handle_destroy(device);

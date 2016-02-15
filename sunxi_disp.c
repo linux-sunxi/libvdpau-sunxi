@@ -172,9 +172,9 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 		break;
 	}
 
-	disp->video_info.fb.addr[0] = surface->yuv->data->phys + 0x40000000;
-	disp->video_info.fb.addr[1] = surface->yuv->data->phys + surface->vs->luma_size + 0x40000000;
-	disp->video_info.fb.addr[2] = surface->yuv->data->phys + surface->vs->luma_size + surface->vs->chroma_size / 2 + 0x40000000;
+	disp->video_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
+	disp->video_info.fb.addr[1] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size;
+	disp->video_info.fb.addr[2] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size + surface->vs->chroma_size / 2;
 
 	disp->video_info.fb.size.width = surface->vs->width;
 	disp->video_info.fb.size.height = surface->vs->height;
@@ -249,7 +249,7 @@ static int sunxi_disp_set_osd_layer(struct sunxi_disp *sunxi_disp, int x, int y,
 		break;
 	}
 
-	disp->osd_info.fb.addr[0] = surface->rgba.data->phys + 0x40000000;
+	disp->osd_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->rgba.data);
 	disp->osd_info.fb.size.width = surface->rgba.width;
 	disp->osd_info.fb.size.height = surface->rgba.height;
 	disp->osd_info.src_win.x = surface->rgba.dirty.x0;
