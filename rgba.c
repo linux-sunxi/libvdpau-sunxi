@@ -51,7 +51,7 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 	if (width < 1 || width > 8192 || height < 1 || height > 8192)
 		return VDP_STATUS_INVALID_SIZE;
 
-	rgba->device = device;
+	rgba->device = sref(device);
 	rgba->width = width;
 	rgba->height = height;
 	rgba->format = format;
@@ -77,6 +77,9 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 
 void rgba_destroy(rgba_surface_t *rgba)
 {
+	if (!rgba->device)
+		return;
+
 	if (rgba->device->osd_enabled)
 	{
 		if(!rgba->device->g2d_enabled)
@@ -84,6 +87,8 @@ void rgba_destroy(rgba_surface_t *rgba)
 
 		cedrus_mem_free(rgba->data);
 	}
+
+	sfree(rgba->device);
 }
 
 VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,

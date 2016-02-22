@@ -226,13 +226,13 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		// set forward/backward predicion buffers
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
-			video_surface_ctx_t *forward = handle_get(info->forward_reference);
+			smart video_surface_ctx_t *forward = handle_get(info->forward_reference);
 			writel(cedrus_mem_get_bus_addr(forward->rec), ve_regs + VE_MPEG_FWD_LUMA);
 			writel(cedrus_mem_get_bus_addr(forward->rec) + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
-			video_surface_ctx_t *backward = handle_get(info->backward_reference);
+			smart video_surface_ctx_t *backward = handle_get(info->backward_reference);
 			writel(cedrus_mem_get_bus_addr(backward->rec), ve_regs + VE_MPEG_BACK_LUMA);
 			writel(cedrus_mem_get_bus_addr(backward->rec) + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 		}

@@ -431,7 +431,7 @@ static void write_pic_list(struct h265_private *p)
 	{
 		if (p->info->RefPics[i] != VDP_INVALID_HANDLE)
 		{
-			video_surface_ctx_t *v = handle_get(p->info->RefPics[i]);
+			smart video_surface_ctx_t *v = handle_get(p->info->RefPics[i]);
 			struct h265_video_private *vp = get_surface_priv(p, v);
 
 			writel(VE_SRAM_HEVC_PIC_LIST + i * 0x20, p->regs + VE_HEVC_SRAM_ADDR);

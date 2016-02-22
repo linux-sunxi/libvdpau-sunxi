@@ -123,10 +123,14 @@ err_open:
 static void sunxi_disp_close(struct sunxi_disp *sunxi_disp)
 {
 	struct sunxi_disp_private *disp = (struct sunxi_disp_private *)sunxi_disp;
+	uint32_t args[4] = { 0, 0, 0, 0 };
 
-	uint32_t args[4] = { 0, disp->video_layer, 0, 0 };
-	ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
-	ioctl(disp->fd, DISP_CMD_LAYER_RELEASE, args);
+	if (disp->video_layer)
+	{
+		args[1] = disp->video_layer;
+		ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
+		ioctl(disp->fd, DISP_CMD_LAYER_RELEASE, args);
+	}
 
 	if (disp->osd_layer)
 	{

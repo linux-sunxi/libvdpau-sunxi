@@ -114,9 +114,13 @@ static void sunxi_disp1_5_close(struct sunxi_disp *sunxi_disp)
 {
 	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
 
-	unsigned long args[4] = { 0, disp->video_layer };
+	unsigned long args[4] = { 0, 0 };
 
-	ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
+	if (disp->video_layer)
+	{
+		args[1] = disp->video_layer;
+		ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
+	}
 
 	if (disp->osd_layer)
 	{

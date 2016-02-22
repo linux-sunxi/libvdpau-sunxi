@@ -21,6 +21,18 @@
 #include <cedrus/cedrus.h>
 #include "vdpau_private.h"
 
+static void cleanup_decoder(void *ptr, void *meta)
+{
+	decoder_ctx_t *decoder = ptr;
+
+	if (decoder->private_free)
+		decoder->private_free(decoder);
+
+	cedrus_mem_free(decoder->data);
+
+	sfree(decoder->device);
+}
+
 VdpStatus vdp_decoder_create(VdpDevice device,
                              VdpDecoderProfile profile,
                              uint32_t width,
@@ -28,25 +40,25 @@ VdpStatus vdp_decoder_create(VdpDevice device,
                              uint32_t max_references,
                              VdpDecoder *decoder)
 {
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
 	if (max_references > 16)
 		return VDP_STATUS_ERROR;
 
-	decoder_ctx_t *dec = handle_create(sizeof(*dec), decoder);
+	smart decoder_ctx_t *dec = handle_alloc(sizeof(*dec), cleanup_decoder);
 	if (!dec)
-		goto err_ctx;
+		return VDP_STATUS_RESOURCES;
 
-	dec->device = dev;
+	dec->device = sref(dev);
 	dec->profile = profile;
 	dec->width = width;
 	dec->height = height;
 
 	dec->data = cedrus_mem_alloc(dec->device->cedrus, VBV_SIZE);
 	if (!(dec->data))
-		goto err_data;
+		return VDP_STATUS_RESOURCES;
 
 	VdpStatus ret;
 	switch (profile)
@@ -83,32 +95,9 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 	}
 
 	if (ret != VDP_STATUS_OK)
-		goto err_decoder;
+		return VDP_STATUS_ERROR;
 
-	return VDP_STATUS_OK;
-
-err_decoder:
-	cedrus_mem_free(dec->data);
-err_data:
-	handle_destroy(*decoder);
-err_ctx:
-	return VDP_STATUS_RESOURCES;
-}
-
-VdpStatus vdp_decoder_destroy(VdpDecoder decoder)
-{
-	decoder_ctx_t *dec = handle_get(decoder);
-	if (!dec)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	if (dec->private_free)
-		dec->private_free(dec);
-
-	cedrus_mem_free(dec->data);
-
-	handle_destroy(decoder);
-
-	return VDP_STATUS_OK;
+	return handle_create(decoder, dec);
 }
 
 VdpStatus vdp_decoder_get_parameters(VdpDecoder decoder,
@@ -116,7 +105,7 @@ VdpStatus vdp_decoder_get_parameters(VdpDecoder decoder,
                                      uint32_t *width,
                                      uint32_t *height)
 {
-	decoder_ctx_t *dec = handle_get(decoder);
+	smart decoder_ctx_t *dec = handle_get(decoder);
 	if (!dec)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -138,11 +127,11 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
                              uint32_t bitstream_buffer_count,
                              VdpBitstreamBuffer const *bitstream_buffers)
 {
-	decoder_ctx_t *dec = handle_get(decoder);
+	smart decoder_ctx_t *dec = handle_get(decoder);
 	if (!dec)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	video_surface_ctx_t *vid = handle_get(target);
+	smart video_surface_ctx_t *vid = handle_get(target);
 	if (!vid)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -170,7 +159,7 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 	if (!is_supported || !max_level || !max_macroblocks || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 

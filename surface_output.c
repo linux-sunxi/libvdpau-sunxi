@@ -20,6 +20,18 @@
 #include "vdpau_private.h"
 #include "rgba.h"
 
+static void cleanup_output_surface(void *ptr, void *meta)
+{
+	output_surface_ctx_t *surface = ptr;
+
+	rgba_destroy(&surface->rgba);
+
+	if (surface->yuv)
+		yuv_unref(surface->yuv);
+
+	sfree(surface->vs);
+}
+
 VdpStatus vdp_output_surface_create(VdpDevice device,
                                     VdpRGBAFormat rgba_format,
                                     uint32_t width,
@@ -31,11 +43,11 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	output_surface_ctx_t *out = handle_create(sizeof(*out), surface);
+	smart output_surface_ctx_t *out = handle_alloc(sizeof(*out), cleanup_output_surface);
 	if (!out)
 		return VDP_STATUS_RESOURCES;
 
@@ -44,28 +56,9 @@ VdpStatus vdp_output_surface_create(VdpDevice device,
 
 	ret = rgba_create(&out->rgba, dev, width, height, rgba_format);
 	if (ret != VDP_STATUS_OK)
-	{
-		handle_destroy(*surface);
 		return ret;
-	}
 
-	return VDP_STATUS_OK;
-}
-
-VdpStatus vdp_output_surface_destroy(VdpOutputSurface surface)
-{
-	output_surface_ctx_t *out = handle_get(surface);
-	if (!out)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	rgba_destroy(&out->rgba);
-
-	if (out->yuv)
-		yuv_unref(out->yuv);
-
-	handle_destroy(surface);
-
-	return VDP_STATUS_OK;
+	return handle_create(surface, out);
 }
 
 VdpStatus vdp_output_surface_get_parameters(VdpOutputSurface surface,
@@ -73,7 +66,7 @@ VdpStatus vdp_output_surface_get_parameters(VdpOutputSurface surface,
                                             uint32_t *width,
                                             uint32_t *height)
 {
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -94,7 +87,7 @@ VdpStatus vdp_output_surface_get_bits_native(VdpOutputSurface surface,
                                              void *const *destination_data,
                                              uint32_t const *destination_pitches)
 {
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -108,7 +101,7 @@ VdpStatus vdp_output_surface_put_bits_native(VdpOutputSurface surface,
                                              uint32_t const *source_pitches,
                                              VdpRect const *destination_rect)
 {
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -123,7 +116,7 @@ VdpStatus vdp_output_surface_put_bits_indexed(VdpOutputSurface surface,
                                               VdpColorTableFormat color_table_format,
                                               void const *color_table)
 {
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -138,7 +131,7 @@ VdpStatus vdp_output_surface_put_bits_y_cb_cr(VdpOutputSurface surface,
                                               VdpRect const *destination_rect,
                                               VdpCSCMatrix const *csc_matrix)
 {
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -153,11 +146,11 @@ VdpStatus vdp_output_surface_render_output_surface(VdpOutputSurface destination_
                                                    VdpOutputSurfaceRenderBlendState const *blend_state,
                                                    uint32_t flags)
 {
-	output_surface_ctx_t *out = handle_get(destination_surface);
+	smart output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	output_surface_ctx_t *in = handle_get(source_surface);
+	smart output_surface_ctx_t *in = handle_get(source_surface);
 
 	return rgba_render_surface(&out->rgba, destination_rect, in ? &in->rgba : NULL, source_rect,
 					colors, blend_state, flags);
@@ -171,11 +164,11 @@ VdpStatus vdp_output_surface_render_bitmap_surface(VdpOutputSurface destination_
                                                    VdpOutputSurfaceRenderBlendState const *blend_state,
                                                    uint32_t flags)
 {
-	output_surface_ctx_t *out = handle_get(destination_surface);
+	smart output_surface_ctx_t *out = handle_get(destination_surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	bitmap_surface_ctx_t *in = handle_get(source_surface);
+	smart bitmap_surface_ctx_t *in = handle_get(source_surface);
 
 	return rgba_render_surface(&out->rgba, destination_rect, in ? &in->rgba : NULL, source_rect,
 					colors, blend_state, flags);
@@ -190,7 +183,7 @@ VdpStatus vdp_output_surface_query_capabilities(VdpDevice device,
 	if (!is_supported || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -208,7 +201,7 @@ VdpStatus vdp_output_surface_query_get_put_bits_native_capabilities(VdpDevice de
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -226,7 +219,7 @@ VdpStatus vdp_output_surface_query_put_bits_indexed_capabilities(VdpDevice devic
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -243,7 +236,7 @@ VdpStatus vdp_output_surface_query_put_bits_y_cb_cr_capabilities(VdpDevice devic
 	if (!is_supported)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 

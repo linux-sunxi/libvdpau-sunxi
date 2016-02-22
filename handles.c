@@ -31,15 +31,26 @@ static struct
 	pthread_rwlock_t lock;
 } ht = { .lock = PTHREAD_RWLOCK_INITIALIZER };
 
-void *handle_create(size_t size, VdpHandle *handle)
+void *handle_alloc(size_t size, f_destructor destructor)
 {
+	void *data = smalloc(size, 0, SHARED, destructor);
+	if (data)
+		memset(data, 0, size);
+
+	return data;
+}
+
+VdpStatus handle_create(VdpHandle *handle, void *data)
+{
+	unsigned int index;
+	VdpStatus ret = VDP_STATUS_ERROR;
 	*handle = VDP_INVALID_HANDLE;
 
-	if (pthread_rwlock_wrlock(&ht.lock))
-		return NULL;
+	if (!data)
+		return ret;
 
-	unsigned int index;
-	void *data = NULL;
+	if (pthread_rwlock_wrlock(&ht.lock))
+		return ret;
 
 	for (index = 0; index < ht.size; index++)
 		if (ht.data[index] == NULL)
@@ -57,48 +68,51 @@ void *handle_create(size_t size, VdpHandle *handle)
 		ht.size = new_size;
 	}
 
-	data = calloc(1, size);
-	if (!data)
-		goto out;
-
-	ht.data[index] = data;
+	ht.data[index] = sref(data);
 	*handle = index + 1;
+	ret = VDP_STATUS_OK;
 
 out:
 	pthread_rwlock_unlock(&ht.lock);
-	return data;
+
+	return ret;
 }
 
 void *handle_get(VdpHandle handle)
 {
-	if (handle == VDP_INVALID_HANDLE)
-		return NULL;
+	unsigned int index = handle - 1;
+	void *data = NULL;
 
 	if (pthread_rwlock_rdlock(&ht.lock))
 		return NULL;
 
-	unsigned int index = handle - 1;
-	void *data = NULL;
-
-	if (index < ht.size)
-		data = ht.data[index];
+	if (index < ht.size && ht.data[index])
+		data = sref(ht.data[index]);
 
 	pthread_rwlock_unlock(&ht.lock);
+
 	return data;
 }
 
-void handle_destroy(VdpHandle handle)
+VdpStatus handle_destroy(VdpHandle handle)
 {
-	if (pthread_rwlock_wrlock(&ht.lock))
-		return;
-
+	VdpStatus ret = VDP_STATUS_INVALID_HANDLE;
 	unsigned int index = handle - 1;
+	void *data = NULL;
 
-	if (index < ht.size)
+	if (pthread_rwlock_wrlock(&ht.lock))
+		return VDP_STATUS_ERROR;
+
+	if (index < ht.size && ht.data[index])
 	{
-		free(ht.data[index]);
+		data = ht.data[index];
 		ht.data[index] = NULL;
+		ret = VDP_STATUS_OK;
 	}
 
 	pthread_rwlock_unlock(&ht.lock);
+
+	sfree(data);
+
+	return ret;
 }

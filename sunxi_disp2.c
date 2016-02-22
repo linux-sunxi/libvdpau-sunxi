@@ -102,10 +102,14 @@ static void sunxi_disp2_close(struct sunxi_disp *sunxi_disp)
 {
 	struct sunxi_disp2_private *disp = (struct sunxi_disp2_private *)sunxi_disp;
 
-	unsigned long args[4] = { 0, (unsigned long)(&disp->video_config), 1, 0 };
+	unsigned long args[4] = { 0, 0, 1, 0 };
 
-	disp->video_config.enable = 0;
-	ioctl(disp->fd, DISP_LAYER_SET_CONFIG, args);
+	if (disp->video_config.enable)
+	{
+		disp->video_config.enable = 0;
+		args[1] = (unsigned long)(&disp->video_config);
+		ioctl(disp->fd, DISP_LAYER_SET_CONFIG, args);
+	}
 
 	if (disp->osd_config.enable)
 	{

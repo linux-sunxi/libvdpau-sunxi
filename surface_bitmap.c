@@ -20,6 +20,13 @@
 #include "vdpau_private.h"
 #include "rgba.h"
 
+static void cleanup_bitmap_surface(void *ptr, void *meta)
+{
+	bitmap_surface_ctx_t *surface = ptr;
+
+	rgba_destroy(&surface->rgba);
+}
+
 VdpStatus vdp_bitmap_surface_create(VdpDevice device,
                                     VdpRGBAFormat rgba_format,
                                     uint32_t width,
@@ -32,11 +39,11 @@ VdpStatus vdp_bitmap_surface_create(VdpDevice device,
 	if (!surface)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	bitmap_surface_ctx_t *out = handle_create(sizeof(*out), surface);
+	smart bitmap_surface_ctx_t *out = handle_alloc(sizeof(*out), cleanup_bitmap_surface);
 	if (!out)
 		return VDP_STATUS_RESOURCES;
 
@@ -44,25 +51,9 @@ VdpStatus vdp_bitmap_surface_create(VdpDevice device,
 
 	ret = rgba_create(&out->rgba, dev, width, height, rgba_format);
 	if (ret != VDP_STATUS_OK)
-	{
-		handle_destroy(*surface);
 		return ret;
-	}
 
-	return VDP_STATUS_OK;
-}
-
-VdpStatus vdp_bitmap_surface_destroy(VdpBitmapSurface surface)
-{
-	bitmap_surface_ctx_t *out = handle_get(surface);
-	if (!out)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	rgba_destroy(&out->rgba);
-
-	handle_destroy(surface);
-
-	return VDP_STATUS_OK;
+	return handle_create(surface, out);
 }
 
 VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface,
@@ -71,7 +62,7 @@ VdpStatus vdp_bitmap_surface_get_parameters(VdpBitmapSurface surface,
                                             uint32_t *height,
                                             VdpBool *frequently_accessed)
 {
-	bitmap_surface_ctx_t *out = handle_get(surface);
+	smart bitmap_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -95,7 +86,7 @@ VdpStatus vdp_bitmap_surface_put_bits_native(VdpBitmapSurface surface,
                                              uint32_t const *source_pitches,
                                              VdpRect const *destination_rect)
 {
-	bitmap_surface_ctx_t *out = handle_get(surface);
+	smart bitmap_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -113,7 +104,7 @@ VdpStatus vdp_bitmap_surface_query_capabilities(VdpDevice device,
 	if (!is_supported || !max_width || !max_height)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 

@@ -37,6 +37,14 @@ static uint64_t get_time(void)
 	return (uint64_t)tp.tv_sec * 1000000000ULL + (uint64_t)tp.tv_nsec;
 }
 
+static void cleanup_presentation_queue_target(void *ptr, void *meta)
+{
+	queue_target_ctx_t *target = ptr;
+
+	target->disp->close(target->disp);
+}
+
+
 VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
                                                    Drawable drawable,
                                                    VdpPresentationQueueTarget *target)
@@ -44,11 +52,11 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	if (!target || !drawable)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	queue_target_ctx_t *qt = handle_create(sizeof(*qt), target);
+	smart queue_target_ctx_t *qt = handle_alloc(sizeof(*qt), cleanup_presentation_queue_target);
 	if (!qt)
 		return VDP_STATUS_RESOURCES;
 
@@ -66,20 +74,15 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	if (!qt->disp)
 		return VDP_STATUS_ERROR;
 
-	return VDP_STATUS_OK;
+	return handle_create(target, qt);
 }
 
-VdpStatus vdp_presentation_queue_target_destroy(VdpPresentationQueueTarget presentation_queue_target)
+static void cleanup_presentation_queue(void *ptr, void *meta)
 {
-	queue_target_ctx_t *qt = handle_get(presentation_queue_target);
-	if (!qt)
-		return VDP_STATUS_INVALID_HANDLE;
+	queue_ctx_t *queue = ptr;
 
-	qt->disp->close(qt->disp);
-
-	handle_destroy(presentation_queue_target);
-
-	return VDP_STATUS_OK;
+	sfree(queue->target);
+	sfree(queue->device);
 }
 
 VdpStatus vdp_presentation_queue_create(VdpDevice device,
@@ -89,33 +92,22 @@ VdpStatus vdp_presentation_queue_create(VdpDevice device,
 	if (!presentation_queue)
 		return VDP_STATUS_INVALID_POINTER;
 
-	device_ctx_t *dev = handle_get(device);
+	smart device_ctx_t *dev = handle_get(device);
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	queue_target_ctx_t *qt = handle_get(presentation_queue_target);
+	smart queue_target_ctx_t *qt = handle_get(presentation_queue_target);
 	if (!qt)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	queue_ctx_t *q = handle_create(sizeof(*q), presentation_queue);
+	smart queue_ctx_t *q = handle_alloc(sizeof(*q), cleanup_presentation_queue);
 	if (!q)
 		return VDP_STATUS_RESOURCES;
 
-	q->target = qt;
-	q->device = dev;
+	q->target = sref(qt);
+	q->device = sref(dev);
 
-	return VDP_STATUS_OK;
-}
-
-VdpStatus vdp_presentation_queue_destroy(VdpPresentationQueue presentation_queue)
-{
-	queue_ctx_t *q = handle_get(presentation_queue);
-	if (!q)
-		return VDP_STATUS_INVALID_HANDLE;
-
-	handle_destroy(presentation_queue);
-
-	return VDP_STATUS_OK;
+	return handle_create(presentation_queue, q);
 }
 
 VdpStatus vdp_presentation_queue_set_background_color(VdpPresentationQueue presentation_queue,
@@ -124,7 +116,7 @@ VdpStatus vdp_presentation_queue_set_background_color(VdpPresentationQueue prese
 	if (!background_color)
 		return VDP_STATUS_INVALID_POINTER;
 
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -142,7 +134,7 @@ VdpStatus vdp_presentation_queue_get_background_color(VdpPresentationQueue prese
 	if (!background_color)
 		return VDP_STATUS_INVALID_POINTER;
 
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -157,7 +149,7 @@ VdpStatus vdp_presentation_queue_get_background_color(VdpPresentationQueue prese
 VdpStatus vdp_presentation_queue_get_time(VdpPresentationQueue presentation_queue,
                                           VdpTime *current_time)
 {
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -171,11 +163,11 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
                                          uint32_t clip_height,
                                          VdpTime earliest_presentation_time)
 {
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	output_surface_ctx_t *os = handle_get(surface);
+	smart output_surface_ctx_t *os = handle_get(surface);
 	if (!os)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -216,11 +208,11 @@ VdpStatus vdp_presentation_queue_block_until_surface_idle(VdpPresentationQueue p
                                                           VdpOutputSurface surface,
                                                           VdpTime *first_presentation_time)
 {
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
@@ -234,11 +226,11 @@ VdpStatus vdp_presentation_queue_query_surface_status(VdpPresentationQueue prese
                                                       VdpPresentationQueueStatus *status,
                                                       VdpTime *first_presentation_time)
 {
-	queue_ctx_t *q = handle_get(presentation_queue);
+	smart queue_ctx_t *q = handle_get(presentation_queue);
 	if (!q)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	output_surface_ctx_t *out = handle_get(surface);
+	smart output_surface_ctx_t *out = handle_get(surface);
 	if (!out)
 		return VDP_STATUS_INVALID_HANDLE;
 
