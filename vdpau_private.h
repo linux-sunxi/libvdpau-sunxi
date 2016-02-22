@@ -30,6 +30,7 @@
 #include <vdpau/vdpau_x11.h>
 #include <X11/Xlib.h>
 #include "sunxi_disp.h"
+#include "pixman.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
@@ -43,6 +44,7 @@ typedef struct
 	int fd;
 	int g2d_fd;
 	int osd_enabled;
+	int g2d_enabled;
 } device_ctx_t;
 
 typedef struct
@@ -110,6 +112,7 @@ typedef struct
 	cedrus_mem_t *data;
 	VdpRect dirty;
 	uint32_t flags;
+	pixman_image_t *pimage;
 } rgba_surface_t;
 
 typedef struct output_surface_ctx_struct

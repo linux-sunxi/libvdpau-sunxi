@@ -47,18 +47,30 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	}
 
 	VDPAU_DBG("VE version 0x%04x opened", cedrus_get_ve_version(dev->cedrus));
+	*get_proc_address = vdp_get_proc_address;
 
 	char *env_vdpau_osd = getenv("VDPAU_OSD");
+	char *env_vdpau_g2d = getenv("VDPAU_DISABLE_G2D");
 	if (env_vdpau_osd && strncmp(env_vdpau_osd, "1", 1) == 0)
+		dev->osd_enabled = 1;
+	else
+	{
+		VDPAU_DBG("OSD disabled!");
+		return VDP_STATUS_OK;
+	}
+
+	if (!env_vdpau_g2d || strncmp(env_vdpau_g2d, "1", 1) !=0)
 	{
 		dev->g2d_fd = open("/dev/g2d", O_RDWR);
 		if (dev->g2d_fd != -1)
-			dev->osd_enabled = 1;
-		else
-			VDPAU_DBG("Failed to open /dev/g2d! OSD disabled.");
+		{
+			dev->g2d_enabled = 1;
+			VDPAU_DBG("OSD enabled, using G2D!");
+		}
 	}
 
-	*get_proc_address = vdp_get_proc_address;
+	if (!dev->g2d_enabled)
+		VDPAU_DBG("OSD enabled, using pixman");
 
 	return VDP_STATUS_OK;
 }
@@ -69,7 +81,7 @@ VdpStatus vdp_device_destroy(VdpDevice device)
 	if (!dev)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (dev->osd_enabled)
+	if (dev->g2d_enabled)
 		close(dev->g2d_fd);
 	cedrus_close(dev->cedrus);
 	XCloseDisplay(dev->display);

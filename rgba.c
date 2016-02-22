@@ -21,8 +21,9 @@
 #include <cedrus/cedrus.h>
 #include <sys/ioctl.h>
 #include "vdpau_private.h"
-#include "kernel-headers/g2d_driver.h"
 #include "rgba.h"
+#include "rgba_pixman.h"
+#include "rgba_g2d.h"
 
 static void dirty_add_rect(VdpRect *dirty, const VdpRect *rect)
 {
@@ -61,6 +62,9 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 		if (!rgba->data)
 			return VDP_STATUS_RESOURCES;
 
+		if(!device->g2d_enabled)
+			vdp_pixman_ref(rgba);
+
 		rgba->dirty.x0 = width;
 		rgba->dirty.y0 = height;
 		rgba->dirty.x1 = 0;
@@ -74,7 +78,12 @@ VdpStatus rgba_create(rgba_surface_t *rgba,
 void rgba_destroy(rgba_surface_t *rgba)
 {
 	if (rgba->device->osd_enabled)
+	{
+		if(!rgba->device->g2d_enabled)
+			vdp_pixman_unref(rgba);
+
 		cedrus_mem_free(rgba->data);
+	}
 }
 
 VdpStatus rgba_put_bits_native(rgba_surface_t *rgba,
@@ -235,69 +244,36 @@ void rgba_clear(rgba_surface_t *rgba)
 
 void rgba_fill(rgba_surface_t *dest, const VdpRect *dest_rect, uint32_t color)
 {
-	g2d_fillrect args;
-
 	if (dest->device->osd_enabled)
 	{
-		rgba_flush(dest);
-
-		args.flag = G2D_FIL_PIXEL_ALPHA;
-		args.dst_image.addr[0] = cedrus_mem_get_phys_addr(dest->data);
-		args.dst_image.w = dest->width;
-		args.dst_image.h = dest->height;
-		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-		if (dest_rect)
+		if(dest->device->g2d_enabled)
 		{
-			args.dst_rect.x = dest_rect->x0;
-			args.dst_rect.y = dest_rect->y0;
-			args.dst_rect.w = dest_rect->x1 - dest_rect->x0;
-			args.dst_rect.h = dest_rect->y1 - dest_rect->y0;
+			rgba_flush(dest);
+			g2d_fill(dest, dest_rect, color);
 		}
 		else
 		{
-			args.dst_rect.x = 0;
-			args.dst_rect.y = 0;
-			args.dst_rect.w = dest->width;
-			args.dst_rect.h = dest->height;
+			vdp_pixman_fill(dest, dest_rect, color);
+			dest->flags |= RGBA_FLAG_NEEDS_FLUSH;
 		}
-		args.color = color & 0xffffff ;
-		args.alpha = color >> 24;
-
-		ioctl(dest->device->g2d_fd, G2D_CMD_FILLRECT, &args);
 	}
 }
 
 void rgba_blit(rgba_surface_t *dest, const VdpRect *dest_rect, rgba_surface_t *src, const VdpRect *src_rect)
 {
-	g2d_blt args;
-
 	if (dest->device->osd_enabled)
 	{
-		rgba_flush(dest);
-		rgba_flush(src);
-
-		args.flag = (dest->flags & RGBA_FLAG_NEEDS_CLEAR) ? G2D_BLT_NONE : G2D_BLT_PIXEL_ALPHA;
-		args.src_image.addr[0] = cedrus_mem_get_phys_addr(src->data);
-		args.src_image.w = src->width;
-		args.src_image.h = src->height;
-		args.src_image.format = G2D_FMT_ARGB_AYUV8888;
-		args.src_image.pixel_seq = G2D_SEQ_NORMAL;
-		args.src_rect.x = src_rect->x0;
-		args.src_rect.y = src_rect->y0;
-		args.src_rect.w = src_rect->x1 - src_rect->x0;
-		args.src_rect.h = src_rect->y1 - src_rect->y0;
-		args.dst_image.addr[0] = cedrus_mem_get_phys_addr(dest->data);
-		args.dst_image.w = dest->width;
-		args.dst_image.h = dest->height;
-		args.dst_image.format = G2D_FMT_ARGB_AYUV8888;
-		args.dst_image.pixel_seq = G2D_SEQ_NORMAL;
-		args.dst_x = dest_rect->x0;
-		args.dst_y = dest_rect->y0;
-		args.color = 0;
-		args.alpha = 0;
-
-		ioctl(dest->device->g2d_fd, G2D_CMD_BITBLT, &args);
+		if(dest->device->g2d_enabled)
+		{
+			rgba_flush(dest);
+			rgba_flush(src);
+			g2d_blit(dest, dest_rect, src, src_rect);
+		}
+		else
+		{
+			vdp_pixman_blit(dest, dest_rect, src, src_rect);
+			dest->flags |= RGBA_FLAG_NEEDS_FLUSH;
+		}
 	}
 }
 

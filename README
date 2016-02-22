@@ -8,7 +8,7 @@ Requirements:
 
    libvdpau >= 1.1
    libcedrus (https://github.com/linux-sunxi/libcedrus)
-
+   pixman (http://www.pixman.org)
 
 Installation:
 
@@ -38,8 +38,10 @@ To enable OSD support for e.g. subtitles, set VDPAU_OSD environment
 variable to 1:
    $ export VDPAU_OSD=1
 
+To disable G2D mixer processor usage, set VDPAU_DISABLE_G2D environment
+variable to 1:
+   $ export VDPAU_DISABLE_G2D=1
+
 This partly breaks X11 integration due to hardware limitations. The video
 area can't be overlapped by other windows. For fullscreen use this is no
 problem.
-Note: this needs G2D, so make sure that you have write access to /dev/g2d.
-
