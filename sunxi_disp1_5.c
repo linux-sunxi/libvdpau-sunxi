@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Jens Kuske <jenskuske@gmail.com>
+ * Copyright (c) 2015-2016 Jens Kuske <jenskuske@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,7 +33,9 @@ struct sunxi_disp1_5_private
 
 	int fd;
 	disp_layer_info video_info;
-	int layer_id;
+	int video_layer;
+	disp_layer_info osd_info;
+	int osd_layer;
 	unsigned int screen_width;
 };
 
@@ -51,10 +53,10 @@ struct sunxi_disp *sunxi_disp1_5_open(int osd_enabled)
 	if (disp->fd == -1)
 		goto err_open;
 
-	unsigned long args[3] = { 0, 0, (unsigned long) &disp->video_info };
+	unsigned long args[4] = { 0, 0, (unsigned long) &disp->video_info };
 
-	disp->layer_id = 1;
-	args[1] = disp->layer_id;
+	disp->video_layer = 1;
+	args[1] = disp->video_layer;
 
 	disp->video_info.mode = DISP_LAYER_WORK_MODE_SCALER;
 	disp->video_info.alpha_mode = 1;
@@ -69,6 +71,27 @@ struct sunxi_disp *sunxi_disp1_5_open(int osd_enabled)
 
 	if (ioctl(disp->fd, DISP_CMD_LAYER_SET_INFO, args))
 		goto err_video_layer;
+
+	if (osd_enabled)
+	{
+		disp->osd_layer = 2;
+		args[1] = disp->osd_layer;
+		args[2] = (unsigned long)&disp->osd_info;
+
+		disp->osd_info.mode = DISP_LAYER_WORK_MODE_NORMAL;
+		disp->osd_info.alpha_mode = 0;
+		disp->osd_info.alpha_value = 255;
+		disp->osd_info.pipe = 0;
+		disp->osd_info.ck_enable = 0;
+		disp->osd_info.b_trd_out = 0;
+		disp->osd_info.zorder = 2;
+
+		if (ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args))
+			goto err_video_layer;
+
+		if (ioctl(disp->fd, DISP_CMD_LAYER_SET_INFO, args))
+			goto err_video_layer;
+	}
 
 	disp->screen_width = ioctl(disp->fd, DISP_CMD_GET_SCN_WIDTH, args);
 
@@ -91,9 +114,15 @@ static void sunxi_disp1_5_close(struct sunxi_disp *sunxi_disp)
 {
 	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
 
-	unsigned long args[2] = { 0, disp->layer_id };
+	unsigned long args[4] = { 0, disp->video_layer };
 
 	ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
+
+	if (disp->osd_layer)
+	{
+		args[1] = disp->osd_layer;
+		ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
+	}
 
 	close(disp->fd);
 	free(sunxi_disp);
@@ -136,7 +165,7 @@ static int sunxi_disp1_5_set_video_layer(struct sunxi_disp *sunxi_disp, int x, i
 		src.width -= src_clip;
 	}
 
-	unsigned long args[3] = { 0, disp->layer_id, (unsigned long)(&disp->video_info) };
+	unsigned long args[4] = { 0, disp->video_layer, (unsigned long)(&disp->video_info) };
 	switch (surface->vs->source_format)
 	{
 	case VDP_YCBCR_FORMAT_YUYV:
@@ -180,17 +209,55 @@ static void sunxi_disp1_5_close_video_layer(struct sunxi_disp *sunxi_disp)
 {
 	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
 
-	unsigned long args[2] = { 0, disp->layer_id };
+	unsigned long args[4] = { 0, disp->video_layer };
 
 	ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
 }
 
 static int sunxi_disp1_5_set_osd_layer(struct sunxi_disp *sunxi_disp, int x, int y, int width, int height, output_surface_ctx_t *surface)
 {
-	return -ENOTSUP;
+	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
+
+	unsigned long args[4] = { 0, disp->osd_layer, (unsigned long)(&disp->osd_info) };
+
+	disp_window src = { .x = surface->rgba.dirty.x0, .y = surface->rgba.dirty.y0,
+			  .width = surface->rgba.dirty.x1 - surface->rgba.dirty.x0,
+			  .height = surface->rgba.dirty.y1 - surface->rgba.dirty.y0 };
+	disp_window scn = { .x = x + surface->rgba.dirty.x0, .y = y + surface->rgba.dirty.y0,
+			  .width = min_nz(width, surface->rgba.dirty.x1) - surface->rgba.dirty.x0,
+			  .height = min_nz(height, surface->rgba.dirty.y1) - surface->rgba.dirty.y0 };
+
+	switch (surface->rgba.format)
+	{
+	case VDP_RGBA_FORMAT_R8G8B8A8:
+		disp->osd_info.fb.format = DISP_FORMAT_ABGR_8888;
+		break;
+	case VDP_RGBA_FORMAT_B8G8R8A8:
+	default:
+		disp->osd_info.fb.format = DISP_FORMAT_ARGB_8888;
+		break;
+	}
+
+	disp->osd_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->rgba.data);
+	disp->osd_info.fb.size.width = surface->rgba.width;
+	disp->osd_info.fb.size.height = surface->rgba.height;
+	disp->osd_info.fb.src_win = src;
+	disp->osd_info.screen_win = scn;
+
+	if (ioctl(disp->fd, DISP_CMD_LAYER_ENABLE, args))
+		return -EINVAL;
+
+	if (ioctl(disp->fd, DISP_CMD_LAYER_SET_INFO, args))
+		return -EINVAL;
+
+	return 0;
 }
 
 static void sunxi_disp1_5_close_osd_layer(struct sunxi_disp *sunxi_disp)
 {
-	return;
+	struct sunxi_disp1_5_private *disp = (struct sunxi_disp1_5_private *)sunxi_disp;
+
+	unsigned long args[4] = { 0, disp->osd_layer };
+
+	ioctl(disp->fd, DISP_CMD_LAYER_DISABLE, args);
 }

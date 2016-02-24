@@ -61,10 +61,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 		qt->disp = sunxi_disp2_open(dev->osd_enabled);
 
 	if (!qt->disp)
-	{
-		dev->osd_enabled = 0;
 		qt->disp = sunxi_disp1_5_open(dev->osd_enabled);
-	}
 
 	if (!qt->disp)
 		return VDP_STATUS_ERROR;
