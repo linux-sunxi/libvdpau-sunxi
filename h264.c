@@ -804,7 +804,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 
 	// sdctrl
 	writel(0x00000000, c->regs + VE_H264_SDROT_CTRL);
-	if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1680)
+	if (cedrus_get_ve_version(decoder->device->cedrus) >= 0x1680)
 	{
 		writel(cedrus_mem_get_bus_addr(c->output->yuv->data), c->regs + VE_H264_SDROT_LUMA);
 		writel(cedrus_mem_get_bus_addr(c->output->yuv->data) + c->output->luma_size, c->regs + VE_H264_SDROT_CHROMA);
@@ -834,7 +834,7 @@ static VdpStatus h264_decode(decoder_ctx_t *decoder,
 		}
 
 		// Enable startcode detect and ??
-		writel((0x1 << 25) | (0x1 << 10) | ((cedrus_get_ve_version(decoder->device->cedrus) == 0x1680) << 9), c->regs + VE_H264_CTRL);
+		writel((0x1 << 25) | (0x1 << 10) | ((cedrus_get_ve_version(decoder->device->cedrus) >= 0x1680) << 9), c->regs + VE_H264_CTRL);
 
 		// input buffer
 		writel((len - pos) * 8, c->regs + VE_H264_VLD_LEN);

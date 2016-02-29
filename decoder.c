@@ -71,7 +71,7 @@ VdpStatus vdp_decoder_create(VdpDevice device,
 		break;
 
 	case VDP_DECODER_PROFILE_HEVC_MAIN:
-		if (cedrus_get_ve_version(dec->device->cedrus) == 0x1680)
+		if (cedrus_get_ve_version(dec->device->cedrus) >= 0x1680)
 			ret = new_decoder_h265(dec);
 		else
 			ret = VDP_STATUS_INVALID_DECODER_PROFILE;
@@ -204,7 +204,7 @@ VdpStatus vdp_decoder_query_capabilities(VdpDevice device,
 		break;
 	case VDP_DECODER_PROFILE_HEVC_MAIN:
 		*max_level = VDP_DECODER_LEVEL_HEVC_5;
-		if (cedrus_get_ve_version(dev->cedrus) == 0x1680)
+		if (cedrus_get_ve_version(dev->cedrus) >= 0x1680)
 			*is_supported = VDP_TRUE;
 		else
 			*is_supported = VDP_FALSE;

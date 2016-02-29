@@ -191,7 +191,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
-		if (cedrus_get_ve_version(decoder->device->cedrus) == 0x1680)
+		if (cedrus_get_ve_version(decoder->device->cedrus) >= 0x1680)
 			writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
 
 		// set vop header
@@ -218,7 +218,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(0x0, ve_regs + VE_MPEG_MBA);
 
 		// enable interrupt, unknown control flags
-		writel(0x80084118 | ((cedrus_get_ve_version(decoder->device->cedrus) != 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
+		writel(0x80084118 | ((cedrus_get_ve_version(decoder->device->cedrus) < 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
 
 		// set quantization parameter
 		writel(hdr.vop_quant, ve_regs + VE_MPEG_QP_INPUT);

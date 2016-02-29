@@ -21,6 +21,8 @@
 .section .note.GNU-stack,"",%progbits /* mark stack as non-executable */
 #endif
 
+#ifndef __aarch64__
+
 .text
 .syntax unified
 .arch armv7-a
@@ -173,3 +175,5 @@ thumb_function tiled_deinterleave_to_planar
 	bne	6b
 	b	7b
 end_function tiled_deinterleave_to_planar
+
+#endif

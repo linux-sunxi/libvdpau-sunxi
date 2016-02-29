@@ -70,7 +70,7 @@ VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
 
 VdpStatus rec_prepare(video_surface_ctx_t *video_surface)
 {
-	if (cedrus_get_ve_version(video_surface->device->cedrus) == 0x1680)
+	if (cedrus_get_ve_version(video_surface->device->cedrus) >= 0x1680)
 	{
 		if (!video_surface->rec)
 		{
@@ -192,6 +192,7 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	if (destination_pitches[0] < vs->width || destination_pitches[1] < vs->width / 2)
 		return VDP_STATUS_ERROR;
 
+#ifndef __aarch64__
 	switch (destination_ycbcr_format)
 	{
 	case VDP_YCBCR_FORMAT_NV12:
@@ -206,6 +207,7 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 		tiled_deinterleave_to_planar(cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size, destination_data[2], destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
 	}
+#endif
 
 	return VDP_STATUS_ERROR;
 }

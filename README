@@ -1,7 +1,7 @@
 This is an experimental VDPAU implementation for sunxi SoCs.
 
 It supports decoding of MPEG1 and MPEG2, some limited MPEG4 types,
-H.264 and on the H3 SoC it also decodes H.265.
+H.264 and on H3/A64 it also decodes H.265.
 
 
 Requirements:
