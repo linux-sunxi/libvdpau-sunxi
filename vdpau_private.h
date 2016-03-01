@@ -23,7 +23,9 @@
 #define DEBUG
 #define MAX_HANDLES 64
 #define VBV_SIZE (1 * 1024 * 1024)
+#define MAX_SURFACE_BUFFER (3)
 
+#include <pthread.h>
 #include <stdlib.h>
 #include <csptr/smart_ptr.h>
 #include <cedrus/cedrus.h>
@@ -32,6 +34,7 @@
 #include <X11/Xlib.h>
 #include "sunxi_disp.h"
 #include "pixman.h"
+#include "queue.h"
 
 #define INTERNAL_YCBCR_FORMAT (VdpYCbCrFormat)0xffff
 
@@ -82,6 +85,7 @@ typedef struct
 {
 	Drawable drawable;
 	struct sunxi_disp *disp;
+	device_ctx_t *device;
 } queue_target_ctx_t;
 
 typedef struct
@@ -89,6 +93,8 @@ typedef struct
 	queue_target_ctx_t *target;
 	VdpColor background;
 	device_ctx_t *device;
+	pthread_t presentation_thread_id;
+	QUEUE *queue;
 } queue_ctx_t;
 
 typedef struct
@@ -127,6 +133,10 @@ typedef struct output_surface_ctx_struct
 	float contrast;
 	float saturation;
 	float hue;
+	VdpTime first_presentation_time;
+	VdpPresentationQueueStatus status;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
 } output_surface_ctx_t;
 
 typedef struct
@@ -201,6 +211,7 @@ VdpGetInformationString vdp_get_information_string;
 
 VdpPresentationQueueTargetCreateX11 vdp_presentation_queue_target_create_x11;
 VdpPresentationQueueCreate vdp_presentation_queue_create;
+VdpPresentationQueueDestroy vdp_presentation_queue_destroy;
 VdpPresentationQueueSetBackgroundColor vdp_presentation_queue_set_background_color;
 VdpPresentationQueueGetBackgroundColor vdp_presentation_queue_get_background_color;
 VdpPresentationQueueGetTime vdp_presentation_queue_get_time;

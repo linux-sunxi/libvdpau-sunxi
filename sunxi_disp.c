@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <linux/fb.h>
 #include <sys/ioctl.h>
 #include "kernel-headers/sunxi_disp_ioctl.h"
 #include "vdpau_private.h"
@@ -31,6 +32,7 @@ struct sunxi_disp_private
 	struct sunxi_disp pub;
 
 	int fd;
+	int fb;
 	int video_layer;
 	int osd_layer;
 	__disp_layer_info_t video_info;
@@ -42,6 +44,7 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 static void sunxi_disp_close_video_layer(struct sunxi_disp *sunxi_disp);
 static int sunxi_disp_set_osd_layer(struct sunxi_disp *sunxi_disp, int x, int y, int width, int height, output_surface_ctx_t *surface);
 static void sunxi_disp_close_osd_layer(struct sunxi_disp *sunxi_disp);
+static int sunxi_disp_wait_for_vsync(struct sunxi_disp *sunxi_disp);
 
 struct sunxi_disp *sunxi_disp_open(int osd_enabled)
 {
@@ -62,6 +65,10 @@ struct sunxi_disp *sunxi_disp_open(int osd_enabled)
 
 	args[1] = disp->video_layer;
 	ioctl(disp->fd, osd_enabled ? DISP_CMD_LAYER_TOP : DISP_CMD_LAYER_BOTTOM, args);
+
+	disp->fb = open("/dev/fb0", O_RDWR);
+	if (disp->fb == -1)
+		VDPAU_DBG("VSync disabled.");
 
 	if (osd_enabled)
 	{
@@ -106,6 +113,7 @@ struct sunxi_disp *sunxi_disp_open(int osd_enabled)
 	disp->pub.close_video_layer = sunxi_disp_close_video_layer;
 	disp->pub.set_osd_layer = sunxi_disp_set_osd_layer;
 	disp->pub.close_osd_layer = sunxi_disp_close_osd_layer;
+	disp->pub.wait_for_vsync = sunxi_disp_wait_for_vsync;
 
 	return (struct sunxi_disp *)disp;
 
@@ -138,6 +146,9 @@ static void sunxi_disp_close(struct sunxi_disp *sunxi_disp)
 		ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
 		ioctl(disp->fd, DISP_CMD_LAYER_RELEASE, args);
 	}
+
+	if(disp->fb != -1)
+		close(disp->fb);
 
 	close(disp->fd);
 	free(sunxi_disp);
@@ -279,4 +290,14 @@ static void sunxi_disp_close_osd_layer(struct sunxi_disp *sunxi_disp)
 
 	uint32_t args[4] = { 0, disp->osd_layer, 0, 0 };
 	ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
+}
+
+static int sunxi_disp_wait_for_vsync(struct sunxi_disp *sunxi_disp)
+{
+	struct sunxi_disp_private *disp = (struct sunxi_disp_private *)sunxi_disp;
+
+	if(disp->fb != -1)
+		return ioctl(disp->fb, FBIO_WAITFORVSYNC, 0);
+
+	return 0;
 }

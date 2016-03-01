@@ -42,6 +42,7 @@ static int sunxi_disp2_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int
 static void sunxi_disp2_close_video_layer(struct sunxi_disp *sunxi_disp);
 static int sunxi_disp2_set_osd_layer(struct sunxi_disp *sunxi_disp, int x, int y, int width, int height, output_surface_ctx_t *surface);
 static void sunxi_disp2_close_osd_layer(struct sunxi_disp *sunxi_disp);
+static int sunxi_disp2_wait_for_vsync(struct sunxi_disp *sunxi_disp);
 
 struct sunxi_disp *sunxi_disp2_open(int osd_enabled)
 {
@@ -88,6 +89,7 @@ struct sunxi_disp *sunxi_disp2_open(int osd_enabled)
 	disp->pub.close_video_layer = sunxi_disp2_close_video_layer;
 	disp->pub.set_osd_layer = sunxi_disp2_set_osd_layer;
 	disp->pub.close_osd_layer = sunxi_disp2_close_osd_layer;
+	disp->pub.wait_for_vsync = sunxi_disp2_wait_for_vsync;
 
 	return (struct sunxi_disp *)disp;
 
@@ -272,4 +274,9 @@ static void sunxi_disp2_close_osd_layer(struct sunxi_disp *sunxi_disp)
 	disp->osd_config.enable = 0;
 
 	ioctl(disp->fd, DISP_LAYER_SET_CONFIG, args);
+}
+
+static int sunxi_disp2_wait_for_vsync(struct sunxi_disp *sunxi_disp)
+{
+	return 0;
 }

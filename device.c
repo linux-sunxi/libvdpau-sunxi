@@ -31,6 +31,7 @@ static void cleanup_device(void *ptr, void *meta)
 		close(device->g2d_fd);
 	cedrus_close(device->cedrus);
 	XCloseDisplay(device->display);
+	VDPAU_DBG("libvdpau-sunxi closed.");
 }
 
 VdpStatus vdp_imp_device_create_x11(Display *display,
@@ -153,7 +154,7 @@ static void *const functions[] =
 	[VDP_FUNC_ID_VIDEO_MIXER_RENDER]                                    = vdp_video_mixer_render,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_TARGET_DESTROY]                     = handle_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_CREATE]                             = vdp_presentation_queue_create,
-	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = handle_destroy,
+	[VDP_FUNC_ID_PRESENTATION_QUEUE_DESTROY]                            = vdp_presentation_queue_destroy,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_SET_BACKGROUND_COLOR]               = vdp_presentation_queue_set_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_BACKGROUND_COLOR]               = vdp_presentation_queue_get_background_color,
 	[VDP_FUNC_ID_PRESENTATION_QUEUE_GET_TIME]                           = vdp_presentation_queue_get_time,
