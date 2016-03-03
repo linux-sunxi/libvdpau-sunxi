@@ -30,6 +30,7 @@ struct sunxi_disp
 	int (*set_osd_layer)(struct sunxi_disp *sunxi_disp, int x, int y, int width, int height, output_surface_ctx_t *surface);
 	void (*close_osd_layer)(struct sunxi_disp *sunxi_disp);
 	int (*wait_for_vsync)(struct sunxi_disp *sunxi_disp);
+	int deint_enabled;
 };
 
 struct sunxi_disp *sunxi_disp_open(int osd_enabled);

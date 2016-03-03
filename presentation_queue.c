@@ -38,6 +38,7 @@ typedef struct task
 	uint32_t		clip_height;
 	output_surface_ctx_t	*surface;
 	int			exit_thread;
+	int			start_disp;
 } task_t;
 
 static uint64_t get_time(void)
@@ -77,13 +78,7 @@ VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
 	qt->drawable = drawable;
 	XSetWindowBackground(dev->display, drawable, 0x000102);
 
-	qt->disp = sunxi_disp_open(dev->osd_enabled);
-
-	if (!qt->disp)
-		qt->disp = sunxi_disp2_open(dev->osd_enabled);
-
-	if (!qt->disp)
-		qt->disp = sunxi_disp1_5_open(dev->osd_enabled);
+	qt->disp = dev->disp;
 
 	if (!qt->disp)
 		return VDP_STATUS_ERROR;
@@ -218,6 +213,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->clip_height = clip_height;
 	task->surface = sref(os);
 	task->exit_thread = 0;
+	task->start_disp = 0;
 	os->first_presentation_time = 0;
 	os->status = VDP_PRESENTATION_QUEUE_STATUS_QUEUED;
 
@@ -245,7 +241,11 @@ static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 	XClearWindow(q->device->display, q->target->drawable);
 
 	if (os->vs)
+	{
+		if (os->vs->first_frame_flag || task->start_disp)
+			os->reinit_disp = 1;
 		q->target->disp->set_video_layer(q->target->disp, x, y, clip_width, clip_height, os);
+	}
 	else
 		q->target->disp->close_video_layer(q->target->disp);
 

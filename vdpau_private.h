@@ -49,6 +49,7 @@ typedef struct
 	int g2d_fd;
 	int osd_enabled;
 	int g2d_enabled;
+	struct sunxi_disp *disp;
 } device_ctx_t;
 
 typedef struct
@@ -65,6 +66,8 @@ typedef struct video_surface_ctx_struct
 	VdpYCbCrFormat source_format;
 	yuv_data_t *yuv;
 	int luma_size, chroma_size;
+	int first_frame_flag;
+	int video_deinterlace, video_field;
 	cedrus_mem_t *rec;
 	void *decoder_private;
 	void (*decoder_private_free)(struct video_surface_ctx_struct *surface);
@@ -105,6 +108,7 @@ typedef struct
 	float contrast;
 	float saturation;
 	float hue;
+	int start_stream, deinterlace;
 } mixer_ctx_t;
 
 #define RGBA_FLAG_DIRTY (1 << 0)
@@ -137,6 +141,7 @@ typedef struct output_surface_ctx_struct
 	VdpPresentationQueueStatus status;
 	pthread_mutex_t mutex;
 	pthread_cond_t cond;
+	int reinit_disp;
 } output_surface_ctx_t;
 
 typedef struct

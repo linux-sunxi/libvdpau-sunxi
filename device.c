@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <cedrus/cedrus.h>
 #include "vdpau_private.h"
+#include "sunxi_disp.h"
 
 static void cleanup_device(void *ptr, void *meta)
 {
@@ -78,6 +79,28 @@ VdpStatus vdp_imp_device_create_x11(Display *display,
 	}
 	else
 		VDPAU_DBG("OSD disabled!");
+
+	/* Try to create sunxi_disp */
+	dev->disp = sunxi_disp_open(dev->osd_enabled);
+
+	if (!dev->disp)
+	{
+		dev->disp = sunxi_disp2_open(dev->osd_enabled);
+
+		if (!dev->disp)
+		{
+			dev->disp = sunxi_disp1_5_open(dev->osd_enabled);
+
+			if (!dev->disp)
+				VDPAU_DBG("Display /dev/disp not available!");
+			else
+				VDPAU_DBG("Using display v1.5");
+		}
+		else
+			VDPAU_DBG("Using display v2.0");
+	}
+	else
+		VDPAU_DBG("Using display v1.0");
 
 	return handle_create(device, dev);
 }

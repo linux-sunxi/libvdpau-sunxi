@@ -35,8 +35,10 @@ struct sunxi_disp_private
 	int fb;
 	int video_layer;
 	int osd_layer;
+	int video_active;
 	__disp_layer_info_t video_info;
 	__disp_layer_info_t osd_info;
+	__disp_video_fb_t videofb_info;
 };
 
 static void sunxi_disp_close(struct sunxi_disp *sunxi_disp);
@@ -114,6 +116,7 @@ struct sunxi_disp *sunxi_disp_open(int osd_enabled)
 	disp->pub.set_osd_layer = sunxi_disp_set_osd_layer;
 	disp->pub.close_osd_layer = sunxi_disp_close_osd_layer;
 	disp->pub.wait_for_vsync = sunxi_disp_wait_for_vsync;
+	disp->pub.deint_enabled = 1;
 
 	return (struct sunxi_disp *)disp;
 
@@ -136,6 +139,8 @@ static void sunxi_disp_close(struct sunxi_disp *sunxi_disp)
 	if (disp->video_layer)
 	{
 		args[1] = disp->video_layer;
+		ioctl(disp->fd, DISP_CMD_VIDEO_STOP, args);
+		disp->video_active = 0;
 		ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
 		ioctl(disp->fd, DISP_CMD_LAYER_RELEASE, args);
 	}
@@ -156,66 +161,98 @@ static void sunxi_disp_close(struct sunxi_disp *sunxi_disp)
 
 static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int y, int width, int height, output_surface_ctx_t *surface)
 {
+	static int last_id;
 	struct sunxi_disp_private *disp = (struct sunxi_disp_private *)sunxi_disp;
 
-	switch (surface->vs->source_format) {
-	case VDP_YCBCR_FORMAT_YUYV:
-		disp->video_info.fb.mode = DISP_MOD_INTERLEAVED;
-		disp->video_info.fb.format = DISP_FORMAT_YUV422;
-		disp->video_info.fb.seq = DISP_SEQ_YUYV;
-		break;
-	case VDP_YCBCR_FORMAT_UYVY:
-		disp->video_info.fb.mode = DISP_MOD_INTERLEAVED;
-		disp->video_info.fb.format = DISP_FORMAT_YUV422;
-		disp->video_info.fb.seq = DISP_SEQ_UYVY;
-		break;
-	case VDP_YCBCR_FORMAT_NV12:
-		disp->video_info.fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
-		disp->video_info.fb.format = DISP_FORMAT_YUV420;
-		disp->video_info.fb.seq = DISP_SEQ_UVUV;
-		break;
-	case VDP_YCBCR_FORMAT_YV12:
-		disp->video_info.fb.mode = DISP_MOD_NON_MB_PLANAR;
-		disp->video_info.fb.format = DISP_FORMAT_YUV420;
-		disp->video_info.fb.seq = DISP_SEQ_UVUV;
-		break;
-	default:
-	case INTERNAL_YCBCR_FORMAT:
-		disp->video_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
-		disp->video_info.fb.format = DISP_FORMAT_YUV420;
-		disp->video_info.fb.seq = DISP_SEQ_UVUV;
-		break;
-	}
+	uint32_t args[4] = { 0, disp->video_layer, 0, 0 };
 
-	disp->video_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
-	disp->video_info.fb.addr[1] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size;
-	disp->video_info.fb.addr[2] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size + surface->vs->chroma_size / 2;
-
-	disp->video_info.fb.size.width = surface->vs->width;
-	disp->video_info.fb.size.height = surface->vs->height;
-	disp->video_info.src_win.x = surface->video_src_rect.x0;
-	disp->video_info.src_win.y = surface->video_src_rect.y0;
-	disp->video_info.src_win.width = surface->video_src_rect.x1 - surface->video_src_rect.x0;
-	disp->video_info.src_win.height = surface->video_src_rect.y1 - surface->video_src_rect.y0;
-	disp->video_info.scn_win.x = x + surface->video_dst_rect.x0;
-	disp->video_info.scn_win.y = y + surface->video_dst_rect.y0;
-	disp->video_info.scn_win.width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0;
-	disp->video_info.scn_win.height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0;
-
-	if (disp->video_info.scn_win.y < 0)
+	if (surface->reinit_disp)
 	{
-		int scn_clip = -(disp->video_info.scn_win.y);
-		int src_clip = scn_clip * disp->video_info.src_win.height / disp->video_info.scn_win.height;
-		disp->video_info.src_win.y += src_clip;
-		disp->video_info.src_win.height -= src_clip;
-		disp->video_info.scn_win.y = 0;
-		disp->video_info.scn_win.height -= scn_clip;
+		last_id = -1;
+
+		switch (surface->vs->source_format) {
+		case VDP_YCBCR_FORMAT_YUYV:
+			disp->video_info.fb.mode = DISP_MOD_INTERLEAVED;
+			disp->video_info.fb.format = DISP_FORMAT_YUV422;
+			disp->video_info.fb.seq = DISP_SEQ_YUYV;
+			break;
+		case VDP_YCBCR_FORMAT_UYVY:
+			disp->video_info.fb.mode = DISP_MOD_INTERLEAVED;
+			disp->video_info.fb.format = DISP_FORMAT_YUV422;
+			disp->video_info.fb.seq = DISP_SEQ_UYVY;
+			break;
+		case VDP_YCBCR_FORMAT_NV12:
+			disp->video_info.fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
+			disp->video_info.fb.format = DISP_FORMAT_YUV420;
+			disp->video_info.fb.seq = DISP_SEQ_UVUV;
+			break;
+		case VDP_YCBCR_FORMAT_YV12:
+			disp->video_info.fb.mode = DISP_MOD_NON_MB_PLANAR;
+			disp->video_info.fb.format = DISP_FORMAT_YUV420;
+			disp->video_info.fb.seq = DISP_SEQ_UVUV;
+			break;
+		default:
+		case INTERNAL_YCBCR_FORMAT:
+			disp->video_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
+			disp->video_info.fb.format = DISP_FORMAT_YUV420;
+			disp->video_info.fb.seq = DISP_SEQ_UVUV;
+			break;
+		}
+
+		disp->video_info.fb.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
+		disp->video_info.fb.addr[1] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size;
+		disp->video_info.fb.addr[2] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size + surface->vs->chroma_size / 2;
+
+		disp->video_info.fb.size.width = surface->vs->width;
+		disp->video_info.fb.size.height = surface->vs->height;
+		disp->video_info.src_win.x = surface->video_src_rect.x0;
+		disp->video_info.src_win.y = surface->video_src_rect.y0;
+		disp->video_info.src_win.width = surface->video_src_rect.x1 - surface->video_src_rect.x0;
+		disp->video_info.src_win.height = surface->video_src_rect.y1 - surface->video_src_rect.y0;
+		disp->video_info.scn_win.x = x + surface->video_dst_rect.x0;
+		disp->video_info.scn_win.y = y + surface->video_dst_rect.y0;
+		disp->video_info.scn_win.width = surface->video_dst_rect.x1 - surface->video_dst_rect.x0;
+		disp->video_info.scn_win.height = surface->video_dst_rect.y1 - surface->video_dst_rect.y0;
+
+		if (disp->video_info.scn_win.y < 0)
+		{
+			int scn_clip = -(disp->video_info.scn_win.y);
+			int src_clip = scn_clip * disp->video_info.src_win.height / disp->video_info.scn_win.height;
+			disp->video_info.src_win.y += src_clip;
+			disp->video_info.src_win.height -= src_clip;
+			disp->video_info.scn_win.y = 0;
+			disp->video_info.scn_win.height -= scn_clip;
+		}
+
+		args[2] = (unsigned long)(&disp->video_info);
+		ioctl(disp->fd, DISP_CMD_LAYER_SET_PARA, args);
+
+		ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
+		ioctl(disp->fd, DISP_CMD_VIDEO_START, args);
+		disp->video_active = 1;
+	}
+	else
+	{
+		if (disp->video_active == 0)
+		{
+			uint32_t args[4] = { 0, disp->video_layer, 0, 0 };
+			ioctl(disp->fd, DISP_CMD_VIDEO_START, args);
+		}
+		disp->videofb_info.id = last_id + 1;
+		disp->videofb_info.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
+		disp->videofb_info.addr[1] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size;
+		disp->videofb_info.addr[2] = cedrus_mem_get_phys_addr(surface->yuv->data) + surface->vs->luma_size + surface->vs->chroma_size / 2;
+		disp->videofb_info.interlace = surface->vs->video_deinterlace;
+		disp->videofb_info.top_field_first = surface->vs->video_field ? 0 : 1;
+
+		args[2] = (unsigned long)(&disp->videofb_info);
+		if (ioctl(disp->fd, DISP_CMD_VIDEO_SET_FB, args))
+			VDPAU_DBG("DISP_CMD_VIDEO_SET_FB failed");
+		last_id++;
+
+		ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
 	}
 
-	uint32_t args[4] = { 0, disp->video_layer, (unsigned long)(&disp->video_info), 0 };
-	ioctl(disp->fd, DISP_CMD_LAYER_SET_PARA, args);
-
-	ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
 
 	// Note: might be more reliable (but slower and problematic when there
 	// are driver issues and the GET functions return wrong values) to query the
@@ -246,6 +283,8 @@ static void sunxi_disp_close_video_layer(struct sunxi_disp *sunxi_disp)
 	struct sunxi_disp_private *disp = (struct sunxi_disp_private *)sunxi_disp;
 
 	uint32_t args[4] = { 0, disp->video_layer, 0, 0 };
+	ioctl(disp->fd, DISP_CMD_VIDEO_STOP, args);
+	disp->video_active = 0;
 	ioctl(disp->fd, DISP_CMD_LAYER_CLOSE, args);
 }
 

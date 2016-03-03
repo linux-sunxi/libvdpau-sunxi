@@ -102,6 +102,7 @@ struct sunxi_disp *sunxi_disp1_5_open(int osd_enabled)
 	disp->pub.set_osd_layer = sunxi_disp1_5_set_osd_layer;
 	disp->pub.close_osd_layer = sunxi_disp1_5_close_osd_layer;
 	disp->pub.wait_for_vsync = sunxi_disp1_5_wait_for_vsync;
+	disp->pub.deint_enabled = 0;
 
 	return (struct sunxi_disp *)disp;
 
