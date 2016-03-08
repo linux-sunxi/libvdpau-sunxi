@@ -24,6 +24,7 @@
 #define MAX_HANDLES 64
 #define VBV_SIZE (1 * 1024 * 1024)
 #define MAX_SURFACE_BUFFER (3)
+#define CSC_FULL_RANGE 1
 
 #include <pthread.h>
 #include <stdlib.h>
@@ -109,6 +110,8 @@ typedef struct
 	float saturation;
 	float hue;
 	int start_stream, deinterlace;
+	int custom_csc;
+	VdpCSCMatrix csc_matrix;
 } mixer_ctx_t;
 
 #define RGBA_FLAG_DIRTY (1 << 0)

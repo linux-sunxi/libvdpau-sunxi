@@ -18,6 +18,7 @@
  */
 
 #include <fcntl.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -253,25 +254,38 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 		ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
 	}
 
-
-	// Note: might be more reliable (but slower and problematic when there
-	// are driver issues and the GET functions return wrong values) to query the
-	// old values instead of relying on our internal csc_change.
-	// Since the driver calculates a matrix out of these values after each
-	// set doing this unconditionally is costly.
 	if (surface->csc_change)
 	{
+		uint32_t b, c, s, h;
+
 		ioctl(disp->fd, DISP_CMD_LAYER_ENHANCE_OFF, args);
-		args[2] = 0xff * surface->brightness + 0x20;
+
+		/* scale VDPAU: -1.0 ~ 1.0 to SUNXI: 0 ~ 100 */
+		b = args[2] = ((surface->brightness + 1.0) * 50.0) + 0.5;
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_BRIGHT, args);
-		args[2] = 0x20 * surface->contrast;
+
+		/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+		if (surface->contrast <= 1.0)
+			c = args[2] = (surface->contrast * 50.0) + 0.5;
+		else
+			c = args[2] = (50.0 + (surface->contrast - 1.0) * 50.0 / 9.0) + 0.5;
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_CONTRAST, args);
-		args[2] = 0x20 * surface->saturation;
+
+		/* scale VDPAU: 0.0 ~ 10.0 to SUNXI: 0 ~ 100 */
+		if (surface->saturation <= 1.0)
+			s = args[2] = (surface->saturation * 50.0) + 0.5;
+		else
+			s = args[2] = (50.0 + (surface->saturation - 1.0) * 50.0 / 9.0) + 0.5;
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_SATURATION, args);
-		// hue scale is randomly chosen, no idea how it maps exactly
-		args[2] = (32 / 3.14) * surface->hue + 0x20;
+
+		/* scale VDPAU: -PI ~ PI   to SUNXI: 0 ~ 100 */
+		h = args[2] = (((surface->hue / M_PI) + 1.0) * 50.0) + 0.5;
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_HUE, args);
+
 		ioctl(disp->fd, DISP_CMD_LAYER_ENHANCE_ON, args);
+
+		VDPAU_DBG("Presentation queue csc change");
+		VDPAU_DBG("display driver -> bright: %d, contrast: %d, saturation: %d, hue: %d", b, c, s, h);
 		surface->csc_change = 0;
 	}
 
