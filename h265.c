@@ -308,6 +308,7 @@ static void slice_header(struct h265_private *p)
 		p->slice.num_ref_idx_l0_active_minus1 = p->info->num_ref_idx_l0_default_active_minus1;
 		p->slice.num_ref_idx_l1_active_minus1 = p->info->num_ref_idx_l1_default_active_minus1;
 		p->slice.collocated_from_l0_flag = 1;
+		p->slice.collocated_ref_idx = 0;
 		p->slice.slice_deblocking_filter_disabled_flag = p->info->pps_deblocking_filter_disabled_flag;
 		p->slice.slice_beta_offset_div2 = p->info->pps_beta_offset_div2;
 		p->slice.slice_tc_offset_div2 = p->info->pps_tc_offset_div2;
@@ -471,7 +472,7 @@ static void write_ref_pic_lists(struct h265_private *p)
 			for (i = 0; i < p->info->NumPocStCurrAfter && rIdx < NumRpsCurrTempList0; rIdx++, i++)
 				RefPicListTemp0[rIdx] = p->info->RefPicSetStCurrAfter[i];
 			for (i = 0; i < p->info->NumPocLtCurr && rIdx < NumRpsCurrTempList0; rIdx++, i++)
-				RefPicListTemp0[rIdx] = p->info->RefPicSetLtCurr[i];
+				RefPicListTemp0[rIdx] = p->info->RefPicSetLtCurr[i] | (1 << 7);
 		}
 
 		writel(VE_SRAM_HEVC_REF_PIC_LIST0, p->regs + VE_HEVC_SRAM_ADDR);
@@ -503,7 +504,7 @@ static void write_ref_pic_lists(struct h265_private *p)
 			for (i = 0; i < p->info->NumPocStCurrBefore && rIdx < NumRpsCurrTempList1; rIdx++, i++)
 				RefPicListTemp1[rIdx] = p->info->RefPicSetStCurrBefore[i];
 			for (i = 0; i < p->info->NumPocLtCurr && rIdx < NumRpsCurrTempList1; rIdx++, i++)
-				RefPicListTemp1[rIdx] = p->info->RefPicSetLtCurr[i];
+				RefPicListTemp1[rIdx] = p->info->RefPicSetLtCurr[i] | (1 << 7);
 		}
 
 		writel(VE_SRAM_HEVC_REF_PIC_LIST1, p->regs + VE_HEVC_SRAM_ADDR);
@@ -746,14 +747,17 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 
 		writel(0x40 | p->nal_unit_type, p->regs + VE_HEVC_NAL_HDR);
 
-		writel(0x00018001 |
-			((p->info->strong_intra_smoothing_enabled_flag & 0x1) << 26) |
+		writel(((p->info->strong_intra_smoothing_enabled_flag & 0x1) << 26) |
 			((p->info->sps_temporal_mvp_enabled_flag & 0x1) << 25) |
 			((p->info->sample_adaptive_offset_enabled_flag & 0x1) << 24) |
 			((p->info->amp_enabled_flag & 0x1) << 23) |
 			((p->info->max_transform_hierarchy_depth_intra & 0x7) << 20) |
 			((p->info->max_transform_hierarchy_depth_inter & 0x7) << 17) |
-			((p->info->log2_diff_max_min_luma_coding_block_size & 0x3) << 11), p->regs + VE_HEVC_SPS);
+			((p->info->log2_diff_max_min_transform_block_size & 0x3) << 15) |
+			((p->info->log2_min_transform_block_size_minus2 & 0x3) << 13) |
+			((p->info->log2_diff_max_min_luma_coding_block_size & 0x3) << 11) |
+			((p->info->log2_min_luma_coding_block_size_minus3 & 0x3) << 9) |
+			((p->info->chroma_format_idc & 0x3) << 0), p->regs + VE_HEVC_SPS);
 
 		writel((decoder->height << 16) | decoder->width, p->regs + VE_HEVC_PIC_SIZE);
 
@@ -769,8 +773,10 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 			((p->info->diff_cu_qp_delta_depth & 0xf) << 4) |
 			((p->info->cu_qp_delta_enabled_flag & 0x1) << 3) |
 			((p->info->transform_skip_enabled_flag & 0x1) << 2) |
+			((p->info->constrained_intra_pred_flag & 0x1) << 1) |
 			((p->info->sign_data_hiding_enabled_flag & 0x1) << 0), p->regs + VE_HEVC_PPS0);
-		writel(((p->info->pps_loop_filter_across_slices_enabled_flag & 0x1) << 6) |
+		writel(((p->info->log2_parallel_merge_level_minus2 & 0x7) << 8) |
+			((p->info->pps_loop_filter_across_slices_enabled_flag & 0x1) << 6) |
 			((p->info->loop_filter_across_tiles_enabled_flag & 0x1) << 5) |
 			((p->info->entropy_coding_sync_enabled_flag & 0x1) << 4) |
 			((p->info->tiles_enabled_flag & 0x1) << 3) |
@@ -817,7 +823,7 @@ static VdpStatus h265_decode(decoder_ctx_t *decoder,
 		writel(0xc0000000, p->regs + VE_EXTRA_OUT_FMT_OFFSET);
 		writel((0x2 << 4), p->regs + 0x0ec);
 		writel(output->chroma_size / 2, p->regs + 0x0c4);
-		writel(((decoder->width / 2) << 16) | decoder->width, p->regs + 0x0c8);
+		writel((ALIGN(decoder->width / 2, 16) << 16) | ALIGN(decoder->width, 32), p->regs + 0x0c8);
 		writel(0x00000000, p->regs + 0x0cc);
 		writel(0x00000000, p->regs + 0x550);
 		writel(0x00000000, p->regs + 0x554);
