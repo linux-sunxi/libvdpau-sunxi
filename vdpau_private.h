@@ -120,6 +120,15 @@ typedef struct
 
 typedef struct
 {
+	int id;
+	VdpRect s_rect, d_rect;
+	VdpColor colors;
+	uint32_t flags;
+	VdpOutputSurfaceRenderBlendState blend_state;
+} rgba_refsurface_t;
+
+typedef struct
+{
 	device_ctx_t *device;
 	VdpRGBAFormat format;
 	uint32_t width, height;
@@ -127,6 +136,8 @@ typedef struct
 	VdpRect dirty;
 	uint32_t flags;
 	pixman_image_t *pimage;
+	int id;
+	rgba_refsurface_t refrgba;
 } rgba_surface_t;
 
 typedef struct output_surface_ctx_struct
