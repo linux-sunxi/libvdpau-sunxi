@@ -90,6 +90,11 @@ typedef struct
 	Drawable drawable;
 	struct sunxi_disp *disp;
 	device_ctx_t *device;
+	int x, y;
+	int drawable_x;
+	int drawable_y;
+	int drawable_width;
+	int drawable_height;
 } queue_target_ctx_t;
 
 typedef struct
@@ -163,6 +168,17 @@ typedef struct
 	rgba_surface_t rgba;
 	VdpBool frequently_accessed;
 } bitmap_surface_ctx_t;
+
+typedef struct task
+{
+	VdpTime			when;
+	uint32_t		clip_width;
+	uint32_t		clip_height;
+	output_surface_ctx_t	*surface;
+	int			exit_thread;
+	int			start_disp;
+	queue_ctx_t		*queue;
+} task_t;
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))

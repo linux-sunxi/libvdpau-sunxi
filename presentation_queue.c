@@ -28,19 +28,11 @@
 #include "rgba.h"
 #include "sunxi_disp.h"
 #include "queue.h"
+#include "xevents.h"
 
 static void *presentation_thread(void *param);
 
-typedef struct task
-{
-	VdpTime			when;
-	uint32_t		clip_width;
-	uint32_t		clip_height;
-	output_surface_ctx_t	*surface;
-	int			exit_thread;
-	int			start_disp;
-} task_t;
-
+/* Helpers */
 static uint64_t get_time(void)
 {
 	struct timespec tp;
@@ -59,6 +51,32 @@ static void cleanup_presentation_queue_target(void *ptr, void *meta)
 	target->disp->close(target->disp);
 }
 
+static int rect_changed(VdpRect rect1, VdpRect rect2)
+{
+	if ((rect1.x0 != rect2.x0) ||
+	    (rect1.x1 != rect2.x1) ||
+	    (rect1.y0 != rect2.y0) ||
+	    (rect1.y1 != rect2.y1))
+		return 1;
+
+	return 0;
+}
+
+static int video_surface_changed(video_surface_ctx_t *vs1, video_surface_ctx_t *vs2)
+{
+	if (!vs1 && !vs2)
+		return 0;
+
+	if ((!vs1 && vs2) ||
+	    (vs1 && !vs2) ||
+	    (vs1->height != vs2->height) ||
+	    (vs1->width != vs2->width) ||
+	    (vs1->chroma_type != vs2->chroma_type) ||
+	    (vs1->source_format != vs2->source_format))
+		return 1;
+
+	return 0;
+}
 
 VdpStatus vdp_presentation_queue_target_create_x11(VdpDevice device,
                                                    Drawable drawable,
@@ -212,6 +230,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	task->clip_width = clip_width;
 	task->clip_height = clip_height;
 	task->surface = sref(os);
+	task->queue = sref(q);
 	task->exit_thread = 0;
 	task->start_disp = 0;
 	os->first_presentation_time = 0;
@@ -221,6 +240,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 	{
 		VDPAU_DBG("Error inserting task");
 		sfree(task->surface);
+		sfree(task->queue);
 		free(task);
 		return VDP_STATUS_ERROR;
 	}
@@ -230,21 +250,42 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 
 static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 {
+	int xevents_flag = 0;
+
 	output_surface_ctx_t *os = task->surface;
 
 	uint32_t clip_width = task->clip_width;
 	uint32_t clip_height = task->clip_height;
 
-	Window c;
-	int x,y;
-	XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen), 0, 0, &x, &y, &c);
-	XClearWindow(q->device->display, q->target->drawable);
+	/* Check for XEvents */
+	xevents_flag = check_for_xevents(task);
 
+	if (xevents_flag & XEVENTS_DRAWABLE_UNMAP) /* Window is unmapped, close both layers */
+	{
+		q->target->disp->close_video_layer(q->target->disp);
+		if (q->device->osd_enabled)
+			q->target->disp->close_osd_layer(q->target->disp);
+		return VDP_STATUS_OK;
+	}
+
+	if (xevents_flag & XEVENTS_DRAWABLE_CHANGE)
+	{
+		/* Get new window offset */
+		Window dummy;
+		XTranslateCoordinates(q->device->display, q->target->drawable, RootWindow(q->device->display, q->device->screen),
+		      0, 0, &q->target->x, &q->target->y, &dummy);
+		XClearWindow(q->device->display, q->target->drawable);
+	}
+
+	if (xevents_flag & XEVENTS_REINIT)
+		task->start_disp = 1;
+
+	/* Start displaying */
 	if (os->vs)
 	{
 		if (os->vs->first_frame_flag || task->start_disp)
 			os->reinit_disp = 1;
-		q->target->disp->set_video_layer(q->target->disp, x, y, clip_width, clip_height, os);
+		q->target->disp->set_video_layer(q->target->disp, q->target->x, q->target->y, clip_width, clip_height, os);
 	}
 	else
 		q->target->disp->close_video_layer(q->target->disp);
@@ -259,7 +300,7 @@ static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 	{
 		rgba_flush(&os->rgba);
 
-		q->target->disp->set_osd_layer(q->target->disp, x, y, clip_width, clip_height, os);
+		q->target->disp->set_osd_layer(q->target->disp, q->target->x, q->target->y, clip_width, clip_height, os);
 	}
 	else
 	{
@@ -320,6 +361,12 @@ static void *presentation_thread(void *param)
 			os_prev = os_cur;
 			os_cur = sref(task->surface);
 
+			if (os_cur && os_prev &&
+			   (rect_changed(os_cur->video_dst_rect, os_prev->video_dst_rect) ||
+			    rect_changed(os_cur->video_src_rect, os_prev->video_src_rect) ||
+			    video_surface_changed(os_cur->vs, os_prev->vs)))
+				task->start_disp = 1;
+
 			do_presentation_queue_display(q, task);
 
 			q->target->disp->wait_for_vsync(q->target->disp);
@@ -354,6 +401,7 @@ static void *presentation_thread(void *param)
 		if (task)
 		{
 			sfree(task->surface);
+			sfree(task->queue);
 			free(task);
 		}
 
