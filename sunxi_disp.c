@@ -169,9 +169,8 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 
 	if (surface->reinit_disp)
 	{
+		surface->reinit_disp = 0;
 		last_id = -1;
-		args[2] = (unsigned long)(&disp->video_info);
-		ioctl(disp->fd, DISP_CMD_LAYER_GET_PARA, args);
 
 		switch (surface->vs->source_format) {
 		case VDP_YCBCR_FORMAT_YUYV:
@@ -227,6 +226,7 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 			disp->video_info.scn_win.height -= scn_clip;
 		}
 
+		args[2] = (unsigned long)(&disp->video_info);
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_PARA, args);
 
 		ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
