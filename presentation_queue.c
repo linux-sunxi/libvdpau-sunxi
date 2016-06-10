@@ -251,6 +251,7 @@ VdpStatus vdp_presentation_queue_display(VdpPresentationQueue presentation_queue
 static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 {
 	int xevents_flag = 0;
+	int init_display = task->start_disp;
 
 	output_surface_ctx_t *os = task->surface;
 
@@ -278,15 +279,14 @@ static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 	}
 
 	if (xevents_flag & XEVENTS_REINIT)
-		task->start_disp = 1;
+		init_display = 1;
+
+	if (init_display)
+		os->reinit_disp = 1;
 
 	/* Start displaying */
 	if (os->vs)
-	{
-		if (os->vs->first_frame_flag || task->start_disp)
-			os->reinit_disp = 1;
 		q->target->disp->set_video_layer(q->target->disp, q->target->x, q->target->y, clip_width, clip_height, os);
-	}
 	else
 		q->target->disp->close_video_layer(q->target->disp);
 
@@ -299,13 +299,10 @@ static VdpStatus do_presentation_queue_display(queue_ctx_t *q, task_t *task)
 	if (os->rgba.flags & RGBA_FLAG_DIRTY)
 	{
 		rgba_flush(&os->rgba);
-
 		q->target->disp->set_osd_layer(q->target->disp, q->target->x, q->target->y, clip_width, clip_height, os);
 	}
 	else
-	{
 		q->target->disp->close_osd_layer(q->target->disp);
-	}
 
 	return VDP_STATUS_OK;
 }
@@ -366,6 +363,12 @@ static void *presentation_thread(void *param)
 			    rect_changed(os_cur->video_src_rect, os_prev->video_src_rect) ||
 			    video_surface_changed(os_cur->vs, os_prev->vs)))
 				task->start_disp = 1;
+
+			if (os_cur->vs && os_cur->vs->first_frame_flag)
+			{
+				task->start_disp = 1;
+				os_cur->vs->first_frame_flag = 0;
+			}
 
 			do_presentation_queue_display(q, task);
 

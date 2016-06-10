@@ -170,6 +170,8 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 	if (surface->reinit_disp)
 	{
 		last_id = -1;
+		args[2] = (unsigned long)(&disp->video_info);
+		ioctl(disp->fd, DISP_CMD_LAYER_GET_PARA, args);
 
 		switch (surface->vs->source_format) {
 		case VDP_YCBCR_FORMAT_YUYV:
@@ -225,7 +227,6 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 			disp->video_info.scn_win.height -= scn_clip;
 		}
 
-		args[2] = (unsigned long)(&disp->video_info);
 		ioctl(disp->fd, DISP_CMD_LAYER_SET_PARA, args);
 
 		ioctl(disp->fd, DISP_CMD_LAYER_OPEN, args);
@@ -238,6 +239,7 @@ static int sunxi_disp_set_video_layer(struct sunxi_disp *sunxi_disp, int x, int 
 		{
 			uint32_t args[4] = { 0, disp->video_layer, 0, 0 };
 			ioctl(disp->fd, DISP_CMD_VIDEO_START, args);
+			disp->video_active = 1;
 		}
 		disp->videofb_info.id = last_id + 1;
 		disp->videofb_info.addr[0] = cedrus_mem_get_phys_addr(surface->yuv->data);
