@@ -186,21 +186,53 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	if (!vs)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	if (vs->chroma_type != VDP_CHROMA_TYPE_420 || vs->source_format != INTERNAL_YCBCR_FORMAT)
-		return VDP_STATUS_INVALID_Y_CB_CR_FORMAT;
+	if (vs->chroma_type != VDP_CHROMA_TYPE_420)
+		return VDP_STATUS_INVALID_CHROMA_TYPE;
 
 	if (destination_pitches[0] < vs->width || destination_pitches[1] < vs->width / 2)
 		return VDP_STATUS_ERROR;
 
-#ifndef __aarch64__
-	switch (destination_ycbcr_format)
+	if (vs->source_format == VDP_YCBCR_FORMAT_YV12 && destination_ycbcr_format == VDP_YCBCR_FORMAT_YV12)
 	{
-	case VDP_YCBCR_FORMAT_NV12:
+		int i;
+		const uint8_t *src;
+		uint8_t *dst;
+
+		src = cedrus_mem_get_pointer(vs->yuv->data);
+		dst = destination_data[0];
+		for (i = 0; i < vs->height; i++)
+		{
+			memcpy(dst, src, vs->width);
+			src += ALIGN(vs->width, 32);
+			dst += destination_pitches[0];
+		}
+		src = cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size;
+		dst = destination_data[2];
+		for (i = 0; i < vs->height / 2; i++)
+		{
+			memcpy(dst, src, vs->width / 2);
+			src += ALIGN(vs->width / 2, 16);
+			dst += destination_pitches[2];
+		}
+		src = cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size + vs->chroma_size / 2;
+		dst = destination_data[1];
+		for (i = 0; i < vs->height / 2; i++)
+		{
+			memcpy(dst, src, vs->width / 2);
+			src += ALIGN(vs->width / 2, 16);
+			dst += destination_pitches[1];
+		}
+		return VDP_STATUS_OK;
+	}
+#ifndef __aarch64__
+	else if (vs->source_format == INTERNAL_YCBCR_FORMAT && destination_ycbcr_format == VDP_YCBCR_FORMAT_NV12)
+	{
 		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data), destination_data[0], destination_pitches[0], vs->width, vs->height);
 		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data) + vs->luma_size, destination_data[1], destination_pitches[1], vs->width, vs->height / 2);
 		return VDP_STATUS_OK;
-
-	case VDP_YCBCR_FORMAT_YV12:
+	}
+	else if (vs->source_format == INTERNAL_YCBCR_FORMAT && destination_ycbcr_format == VDP_YCBCR_FORMAT_YV12)
+	{
 		if (destination_pitches[2] != destination_pitches[1])
 			return VDP_STATUS_ERROR;
 		tiled_to_planar(cedrus_mem_get_pointer(vs->yuv->data), destination_data[0], destination_pitches[0], vs->width, vs->height);
@@ -209,7 +241,7 @@ VdpStatus vdp_video_surface_get_bits_y_cb_cr(VdpVideoSurface surface,
 	}
 #endif
 
-	return VDP_STATUS_ERROR;
+	return VDP_STATUS_INVALID_Y_CB_CR_FORMAT;
 }
 
 VdpStatus vdp_video_surface_put_bits_y_cb_cr(VdpVideoSurface surface,

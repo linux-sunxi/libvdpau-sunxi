@@ -146,7 +146,11 @@ VdpStatus vdp_decoder_render(VdpDecoder decoder,
 	if (!vid)
 		return VDP_STATUS_INVALID_HANDLE;
 
-	vid->source_format = INTERNAL_YCBCR_FORMAT;
+	if (cedrus_get_ve_version(dec->device->cedrus) >= 0x1680)
+		vid->source_format = VDP_YCBCR_FORMAT_YV12;
+	else
+		vid->source_format = INTERNAL_YCBCR_FORMAT;
+
 	unsigned int i, pos = 0;
 
 	for (i = 0; i < bitstream_buffer_count; i++)
