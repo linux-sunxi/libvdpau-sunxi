@@ -160,10 +160,6 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 	if (ret != VDP_STATUS_OK)
 		return ret;
 
-	ret = rec_prepare(output);
-	if (ret != VDP_STATUS_OK)
-		return ret;
-
 	bitstream bs = { .data = cedrus_mem_get_pointer(decoder->data), .length = len, .bitpos = 0 };
 
 	while (find_startcode(&bs))
@@ -184,15 +180,20 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(cedrus_mem_get_bus_addr(decoder_p->ncf_buffer), ve_regs + VE_MPEG_NCF_ADDR);
 
 		// set output buffers
-		writel(cedrus_mem_get_bus_addr(output->rec), ve_regs + VE_MPEG_REC_LUMA);
-		writel(cedrus_mem_get_bus_addr(output->rec) + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
+		writel(cedrus_mem_get_bus_addr(output->yuv->data), ve_regs + VE_MPEG_REC_LUMA);
+		writel(cedrus_mem_get_bus_addr(output->yuv->data) + output->luma_size, ve_regs + VE_MPEG_REC_CHROMA);
 		writel(cedrus_mem_get_bus_addr(output->yuv->data), ve_regs + VE_MPEG_ROT_LUMA);
 		writel(cedrus_mem_get_bus_addr(output->yuv->data) + output->luma_size, ve_regs + VE_MPEG_ROT_CHROMA);
 
 		// ??
 		writel(0x40620000, ve_regs + VE_MPEG_SDROT_CTRL);
 		if (cedrus_get_ve_version(decoder->device->cedrus) >= 0x1680)
+		{
 			writel((0x2 << 30) | (0x1 << 28) | (output->chroma_size / 2), ve_regs + VE_EXTRA_OUT_FMT_OFFSET);
+			writel((0x2 << 4), ve_regs + 0x0ec);
+			writel(output->chroma_size / 2, ve_regs + 0x0c4);
+			writel((ALIGN(decoder->width / 2, 16) << 16) | ALIGN(decoder->width, 32), ve_regs + 0x0c8);
+		}
 
 		// set vop header
 		writel(((hdr.vop_coding_type == VOP_B ? 0x1 : 0x0) << 28)
@@ -218,7 +219,7 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		writel(0x0, ve_regs + VE_MPEG_MBA);
 
 		// enable interrupt, unknown control flags
-		writel(0x80084118 | ((cedrus_get_ve_version(decoder->device->cedrus) < 0x1680) << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
+		writel(0x80084118 | (1 << 7) | ((hdr.vop_coding_type == VOP_P ? 0x1 : 0x0) << 12), ve_regs + VE_MPEG_CTRL);
 
 		// set quantization parameter
 		writel(hdr.vop_quant, ve_regs + VE_MPEG_QP_INPUT);
@@ -227,14 +228,14 @@ static VdpStatus mpeg4_decode(decoder_ctx_t *decoder,
 		if (info->forward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *forward = handle_get(info->forward_reference);
-			writel(cedrus_mem_get_bus_addr(forward->rec), ve_regs + VE_MPEG_FWD_LUMA);
-			writel(cedrus_mem_get_bus_addr(forward->rec) + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
+			writel(cedrus_mem_get_bus_addr(forward->yuv->data), ve_regs + VE_MPEG_FWD_LUMA);
+			writel(cedrus_mem_get_bus_addr(forward->yuv->data) + forward->luma_size, ve_regs + VE_MPEG_FWD_CHROMA);
 		}
 		if (info->backward_reference != VDP_INVALID_HANDLE)
 		{
 			video_surface_ctx_t *backward = handle_get(info->backward_reference);
-			writel(cedrus_mem_get_bus_addr(backward->rec), ve_regs + VE_MPEG_BACK_LUMA);
-			writel(cedrus_mem_get_bus_addr(backward->rec) + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
+			writel(cedrus_mem_get_bus_addr(backward->yuv->data), ve_regs + VE_MPEG_BACK_LUMA);
+			writel(cedrus_mem_get_bus_addr(backward->yuv->data) + backward->luma_size, ve_regs + VE_MPEG_BACK_CHROMA);
 		}
 
 		// set trb/trd

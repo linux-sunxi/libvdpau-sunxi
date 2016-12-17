@@ -68,23 +68,6 @@ VdpStatus yuv_prepare(video_surface_ctx_t *video_surface)
 	return VDP_STATUS_OK;
 }
 
-VdpStatus rec_prepare(video_surface_ctx_t *video_surface)
-{
-	if (cedrus_get_ve_version(video_surface->device->cedrus) >= 0x1680)
-	{
-		if (!video_surface->rec)
-		{
-			video_surface->rec = cedrus_mem_alloc(video_surface->device->cedrus, video_surface->luma_size + video_surface->chroma_size);
-			if (!video_surface->rec)
-				return VDP_STATUS_RESOURCES;
-		}
-	}
-	else
-		video_surface->rec = video_surface->yuv->data;
-
-	return VDP_STATUS_OK;
-}
-
 VdpStatus vdp_video_surface_create(VdpDevice device,
                                    VdpChromaType chroma_type,
                                    uint32_t width,
@@ -145,9 +128,6 @@ VdpStatus vdp_video_surface_destroy(VdpVideoSurface surface)
 
 	if (vs->decoder_private_free)
 		vs->decoder_private_free(vs);
-
-	if (vs->rec && vs->rec != vs->yuv->data)
-		cedrus_mem_free(vs->rec);
 
 	yuv_unref(vs->yuv);
 
