@@ -72,6 +72,7 @@ VdpStatus vdp_pixman_blit(rgba_surface_t *rgba_dst, const VdpRect *dst_rect,
 	pixman_image_t *src;
 	pixman_transform_t transform;
 	double fscale_x, fscale_y;
+	int pixman_operator;
 
 	dst = rgba_dst->pimage;
 	src = rgba_src->pimage;
@@ -92,8 +93,9 @@ VdpStatus vdp_pixman_blit(rgba_surface_t *rgba_dst, const VdpRect *dst_rect,
 	pixman_image_set_transform(src, &transform);
 
 	/* Composite to the dest_img */
+	pixman_operator = (rgba_dst->flags & RGBA_FLAG_NEEDS_CLEAR) ? PIXMAN_OP_SRC : PIXMAN_OP_OVER;
 	pixman_image_composite32(
-		PIXMAN_OP_OVER, src, NULL, dst,
+		pixman_operator, src, NULL, dst,
 		(src_rect->x0 * fscale_x), (src_rect->y0 * fscale_y),
 		0, 0,
 		dst_rect->x0, dst_rect->y0,
